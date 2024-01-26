@@ -1,0 +1,83 @@
+---
+openconfig:/interfaces:
+  openconfig-interfaces:interface:
+    - name: vlan1
+      config:
+        name: vlan1
+        type: iana-if-type:l2vlan
+        mtu: 1500
+        enabled: false
+      openconfig-vlan:routed-vlan:
+        config:
+          vlan: 1
+    - name: vlan1000
+      config:
+        name: vlan1000
+        type: iana-if-type:l2vlan
+        description: MY_VLAN
+      openconfig-vlan:routed-vlan:
+        config:
+          vlan: 1000
+        openconfig-if-ip:ipv4:
+          addresses:
+            address:
+              - ip: 10.0.0.2
+                config:
+                  ip: 10.0.0.2
+                  prefix-length: 21
+                vrrp:
+                  vrrp-group:
+                    - virtual-router-id: 100
+                      config:
+                        virtual-router-id: 100
+                        virtual-address:
+                          - 10.0.0.1
+                        priority: 90
+    - name: eth1/62
+      config:
+        name: eth1/62
+        enabled: false
+    - name: eth1/61
+      config:
+        name: eth1/61
+        enabled: false
+    - name: eth1/60
+      config:
+        name: eth1/60
+        enabled: false
+    - name: eth1/59
+      config:
+        name: eth1/59
+        enabled: false
+    - name: eth1/58
+      config:
+        name: eth1/58
+        enabled: false
+    - name: eth1/57
+      config:
+        name: eth1/57
+        enabled: false
+    - name: eth1/56
+      config:
+        name: eth1/56
+        enabled: false
+    - name: eth1/55
+      config:
+        name: eth1/55
+        enabled: false
+    - name: eth1/54
+      config:
+        name: eth1/54
+        enabled: false
+    - name: eth1/53
+      config:
+        name: eth1/53
+        enabled: false
+    - name: eth1/52
+      config:
+        name: eth1/52
+        enabled: false
+    - name: eth1/51
+      config:
+        name: eth1/51
+        enabled: false

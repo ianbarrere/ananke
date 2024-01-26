@@ -1,0 +1,22 @@
+---
+/System/vpc-items:
+  inst-items:
+    adminSt: enabled
+    dom-items:
+      adminSt: enabled
+      id: 900
+      if-items:
+        If-list:
+          - id: 1000
+            rsvpcConf-items:
+              tDn: "/System/intf-items/aggr-items/AggrIf-list[id='po1000']"
+          - id: 1001
+            rsvpcConf-items:
+              tDn: "/System/intf-items/aggr-items/AggrIf-list[id='po1001']"
+      keepalive-items:
+        destIp: 10.255.252.254
+        peerlink-items:
+          adminSt: enabled
+          id: po1000
+        srcIp: 10.255.252.253
+        vrf: VPC-K

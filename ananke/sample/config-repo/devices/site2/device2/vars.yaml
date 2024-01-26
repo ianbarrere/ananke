@@ -1,0 +1,8 @@
+---
+platform:
+  os: "cisco-nxos"
+management:
+  ip: 1.2.3.5
+  mask: 24
+roles:
+  - "spine"

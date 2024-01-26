@@ -1,0 +1,38 @@
+---
+openconfig:/routing-policy:
+  openconfig-routing-policy:defined-sets:
+    prefix-sets:
+      prefix-set:
+        - name: STATIC_TO_BGP
+          config:
+            name: STATIC_TO_BGP
+            mode: IPV4
+          prefixes:
+            prefix:
+              - ip-prefix: 10.0.0.0/16
+                masklength-range: 0..32
+                config:
+                  ip-prefix: 10.0.0.0/16
+                  masklength-range: 0..32
+              - ip-prefix: 10.0.0.0/21
+                masklength-range: 0..32
+                config:
+                  ip-prefix: 10.0.0.0/21
+                  masklength-range: 0..32
+  openconfig-routing-policy:policy-definitions:
+    policy-definition:
+      - name: STATIC_TO_BGP
+        config:
+          name: STATIC_TO_BGP
+        statements:
+          statement:
+            - name: 10
+              config:
+                name: "10"
+              conditions:
+                match-prefix-set:
+                  config:
+                    prefix-set: STATIC_TO_BGP
+              actions:
+                config:
+                  policy-result: ACCEPT_ROUTE

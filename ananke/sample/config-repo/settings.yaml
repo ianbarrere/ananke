@@ -1,0 +1,14 @@
+vault:
+  role-id: my-vault-role-uuid
+  url: https://vault.example.prod
+  mount-point: SRE
+  paths:
+    - 'some/vault/path'
+    - 'another/vault/path'
+username: my_username
+domain-name: 'example.prod'
+write-methods:
+  default: replace
+priority:
+  /System/fm-items: 1
+  openconfig:/interfaces: 2

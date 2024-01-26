@@ -1,0 +1,41 @@
+---
+openconfig-network-instance:network-instances:
+  network-instance:
+    - name: DEFAULT
+      protocols:
+        protocol:
+          - identifier: openconfig-policy-types:BGP
+            name: default
+            config:
+              identifier: openconfig-policy-types:BGP
+              name: default
+            bgp:
+              global:
+                config:
+                  as: 64512
+              neighbors:
+                neighbor:
+                  - neighbor-address: 1.2.3.4
+                    config:
+                      neighbor-address: 1.2.3.4
+                      peer-as: 64513
+                      description: SOME-NEIGHBOR
+                    afi-safis:
+                      afi-safi:
+                        - afi-safi-name: openconfig-bgp-types:IPV4_UNICAST
+                          config:
+                            afi-safi-name: openconfig-bgp-types:IPV4_UNICAST
+                            enabled: true
+                          ipv4-unicast:
+                            prefix-limit:
+                              config:
+                                max-prefixes: 24000
+                                warning-threshold-pct: 75
+                                prevent-teardown: false
+                                restart-timer: '0'
+                          apply-policy:
+                            config:
+                              import-policy:
+                                - RP_IN
+                              export-policy:
+                                - RP_OUT

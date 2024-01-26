@@ -1,0 +1,23 @@
+---
+Cisco-IOS-XR-um-router-bgp-cfg:/router/bgp:
+  Cisco-IOS-XR-um-router-bgp-cfg:as:
+    - as-number: 64512
+      address-families:
+        address-family:
+          - af-name: ipv4-unicast
+            networks:
+              network:
+                - address: 1.2.3.0
+                  masklength: 24
+            redistribute:
+              static:
+                route-policy: STATIC_TO_BGP_64512
+      neighbors:
+        neighbor:
+          - neighbor-address: 1.2.3.4
+            remote-as: 64513
+            description: "Example neighbor"
+            address-families:
+              address-family:
+                - af-name: ipv4-unicast
+                  route-reflector-client: {}

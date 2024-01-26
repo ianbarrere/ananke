@@ -1,0 +1,15 @@
+---
+Cisco-IOS-XR-policy-repository-cfg:/routing-policy:
+  Cisco-IOS-XR-policy-repository-cfg:route-policies:
+    route-policy:
+      - route-policy-name: STATIC_TO_BGP_64512
+        rpl-route-policy:
+          "route-policy STATIC_TO_BGP_64512\n  if destination in
+          STATIC_TO_BGP_64512 then\n    pass\n  else\n    drop\n  endif\nend-policy\n"
+  Cisco-IOS-XR-policy-repository-cfg:sets:
+    prefix-sets:
+      prefix-set:
+        - set-name: STATIC_TO_BGP_64512
+          rpl-prefix-set:
+            "prefix-set STATIC_TO_BGP_64512\n  1.0.0.0/8 le 32\n\
+            end-set\n"

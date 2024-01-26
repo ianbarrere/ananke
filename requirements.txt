@@ -1,0 +1,9 @@
+click>=8.1.7
+pygnmi>=0.8.12
+ruamel-yaml
+pyyaml
+click_option_group>=0.5.6
+jinja2>=3.1.2
+netmiko
+hvac
+pyangbind

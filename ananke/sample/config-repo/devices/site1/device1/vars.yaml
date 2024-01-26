@@ -1,0 +1,10 @@
+---
+platform:
+  os: "cisco-xr"
+management:
+  ip: 1.2.3.4
+  mask: 24
+  username: "root"
+  gnmi-port: 57777
+roles:
+  - "edge"
