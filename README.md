@@ -78,6 +78,11 @@ less powerful) to more complex (and more powerful).
   or even exposing similar funtionality to other platforms and systems via an abstraction
   API. Some ideas on how to use it can be found [here](#how-we-use-it).
 
+## Devices and Services
+Ananke supports interacting with devices using gNMI and also the PacketFabric and Megaport
+APIs for provisioning interconnects. The two are treated differently, starting with either
+the device or service keyword provided to [ananke_cli.py](#cli-tool), but the file contents
+are similar. More information on services can be found [here](#services).
 
 ## CLI tool
 There is a [built-in CLI tool](./ananke/actions/ananke_cli.py) which you can use out of the box
@@ -87,10 +92,12 @@ is quite useful, but here is a brief outline of the capabilities:
 ### set
 The set command allows you to set config on a device:
 
-    ./ananke/actions/ananke_cli.py set device1
+    ./ananke/actions/ananke_cli.py set device device1
+    ./ananke/actions/ananke_cli.py set service packetfabric
 
-Minimally it requires a single host, but you can supply a comma-separated list of hosts
-and/or roles, and it will figure out which hosts to apply to.
+Minimally it requires either the device or service keyword and a single host, but you can
+supply a space-separated list of hosts and/or roles, and it will figure out which hosts to
+apply to.
 
 |Flag|Function|
 |-----|-------|
@@ -113,7 +120,8 @@ The Config object takes an optional sections argument which is a tuple of free-f
 which is compared to the gNMI path of all specified config sections for a device and/or a
 filename. If it's a filename the gNMI paths in that file will be resolved behind the scenes.
 If there is a match, only the contents matching those paths is pushed. If there is no match
-the operation is aborted with an error message.
+the operation is skipped for the target. This behavior allows you to successfully pass
+multiple targets and config sections that don't necessarily correspond to each other.
 
 ## Platform Matching
 The shared templates need a way of matching the platform to which they are being
@@ -315,11 +323,11 @@ transforms:
 
 This directory needs to be reachable for Ananke to import from (defined in PYTHONPATH,
 for example). If configured, Ananke will look there for a python module named after the
-current device platform name (as defined in vars.yaml) with "-" replaced by "_", (e.g. a
-file called cisco_nxos.py), and expects there to be a function in that module called
-transform that takes a ConfigPack object as an argument and returns a ConfigPack object
-(presumably after some modifications to the content attribute have been made). You can
-define the behavior of the transform function to suit your needs.
+current device platform name or service-id (as defined in vars.yaml) with "-" replaced
+by "_", (e.g. a file called cisco_nxos.py), and expects there to be a function in that
+module called transform that takes a ConfigPack object as an argument and returns a
+ConfigPack object (presumably after some modifications to the content attribute have been
+made). You can define the behavior of the transform function to suit your needs.
 
 An example of such a transform that I needed to do to get this working with NX-OS can be
 found in the [sample file](./ananke/sample/transforms/cisco_nxos.py)
@@ -350,7 +358,6 @@ An example of how this is done is in the ananke_cli.py tool:
 ```python
 from ananke.struct.dispatch import Dispatch
 from ananke.struct.config import Config
-from ananke.connectors.gnmi import GnmiDevice
 
 dispatch = Dispatch(["device1"])
 for device in dispatch.target_devices:
@@ -360,7 +367,7 @@ for device in dispatch.target_devices:
         settings=dispatch.settings,
         variables=device.variables,
     )
-    device = GnmiDevice(
+    device = device.connector(
         hostname=device.hostname,
         username=device.username,
         password=device.password,
@@ -434,7 +441,10 @@ This is just the tip of the iceberg. You can get much more sophisticated with yo
 generation if you want.
 
 ## Connectors
-Currently Ananke only supports gNMI as a southbound connector.
+
+* gNMI: This is the only southbound connector for devices that Ananke supports
+* PacketFabric API: PacketFabric interconnects can be provisioned with Ananke
+* Megaport API: Megaport interconnects can be provisioned with Ananke
 
 ## Order of Operations
 In some rare cases you can technically model a device's entire config in a single file
@@ -476,6 +486,74 @@ interfaces, for example, where if you run a replace call towards the interfaces 
 everything and recreates it, which causes an outage of up to a minute while interface config
 reconverges (ports bind to port-channels, etc). There is basic functionality to help
 circumvent this with custom [write methods](###write-methods) and [transforms](###transforms).
+
+## Services
+Ananke supports interacting with virtual circuits provided by PacketFabric and Megaport.
+This means you can define the VC's details under the services/ directory and provision them
+like you would a device. However, some behavior differs between devices and services. The
+most obvious difference is the lack of a true key for a defined VC. This is because the
+actual key (VC ID) is generated when the VC is provisioned, and so cannot be known in a
+case where you are defining a new VC in Ananke. As such, Ananke treats the combination of
+ports and VLANs (if present) as the key for a VC; if the combination of ports and VLANs
+specified already exists as a VC, Ananke will attempt to update that, if not, it will create
+a new VC. With this in mind, the real key of a VC is not shown to the user, and not required
+to be known, and instead you can use whatever key you want in the VC path (this allows you to
+use config section matching to push only config for a VC by giving it a user friendly name
+that describes it rather than a synthetic key generated by the provider). For example, you
+might have a definition like this:
+
+```yaml
+https://api.packetfabric.com/v2/services/SITE1_SITE2_DEV:
+  description:
+  epl: false
+  bandwidth:
+    account_uuid: 85353459-ce16-4187-9c23-8c47ca4ac7f7
+    subscription_term: 1
+    speed: 1Gbps
+  interfaces:
+    - port_circuit_id: PF-AP-NYC17-1689510
+      vlan: 1000
+    - port_circuit_id: PF-AE-NYC1-1694743
+      vlan: 2000
+```
+
+Even though "SITE1_SITE2_DEV" stands where the VC ID normally would in a PacketFabric API
+call, Ananke disregards that string, and instead looks for any VC from port PF-AP-NYC17-1689510
+on VLAN 1000 to port PF-AE-NYC1-1694743 on VLAN 2000 and substitutes the user-friendly
+string with the actual VC ID during runtime. This allows you to run a command like:
+
+`./ananke/actions/ananke_cli.py set service packetfabric -s SITE1_SITE2_DEV`
+
+to provision the VC defined at this path without needing to know the actual VC ID.
+
+### Megaport
+VXCs with Megaport require a bit of opacity because they are modeled as attributes of a
+product yet ordering a new one is done through a different endpoint (networkdesign/buy)
+which requires a different format. The same keying approach is used, but if no connection
+is found then the body is dramatically reformatted behind the scenes to fit with the
+required endpoint. You can specify a pairing key with the pairingKey key like so:
+
+```yaml
+https://api-staging.megaport.com/v3/product/vxc/SITE1_SITE2_DEV:
+  name: SITE1 - SITE2 DEV
+  rateLimit: 1000
+  aEndVlan: 1999
+  bEndVlan: 1999
+  term: 12
+  aEndProductUid: b455b2c9-8cb0-4b9d-93e8-764c2cfaff31
+  bEndProductUid: 1e2052eb-127f-4974-a4da-66ec16b1065b
+  pairingKey: foo
+```
+
+Megaport does not allow you to update details of an end that you don't own, yet bEndVlan
+needs to be present in order to properly cross reference the intent with existing VXCs.
+This requires us to use a [transform](#transforms) to trim out the disallowed contents.
+For a definition like the above, a suitable transform can be found in the [provided sample](./ananke/sample/transforms/megaport.py).
+
+Note that the pairingKey key is not technically part of any schema that I've been able to
+find on Megaport's documentation, but passing it in the PUT body if updating an existing
+circuit does not seem to cause an error nor actually update any key, so it seems innocuous
+enough to leave out of the transform.
 
 ## How we use it
 

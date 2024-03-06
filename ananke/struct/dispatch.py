@@ -3,7 +3,9 @@ from ruamel.yaml import YAML  # type: ignore
 import os
 import logging
 from dataclasses import dataclass
-from typing import Any, Tuple, Dict, List, Optional, Set
+from typing import Any, Tuple, Dict, List, Optional, Set, Union, Literal
+from ananke.connectors.gnmi import GnmiDevice
+from ananke.connectors.services import PacketFabric, Megaport
 
 CONFIG_PACK = Tuple[str, Any]
 CONFIG_DIR = os.environ.get("ANANKE_CONFIG")
@@ -12,26 +14,30 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class Device:
-    hostname: str
+class Target:
+    id: str
     username: str
     password: str
     variables: Dict[str, str]
+    connector: Union[GnmiDevice, PacketFabric, Megaport]
 
 
 class Dispatch:
     """
-    Object for preparing execution. Reads global and device settings and populates
-    list of target Device objects from list of target hostnames/roles
+    Object for preparing execution. Reads global and target settings and populates
+    list of target objects from list of target hostnames/roles/services
     """
 
-    def __init__(self, targets: Tuple[str]):
+    def __init__(self, targets: List[str], target_type: Literal["device", "service"]):
+        if target_type not in ["device", "service"]:
+            raise ValueError("Target type must be one of 'device' or 'service'")
+        self.target_type = target_type
         self.settings = self.get_settings()
         self.secrets = None
-        self.device_variables: Dict[str, Any] = self.get_device_variables()
+        self.variables: Dict[str, Any] = self.get_variables()
         if self.settings["vault"]:
             self.secrets = self.build_vault()
-        self.target_devices: List[Device] = self.build_targets(
+        self.targets: List[Target] = self.build_targets(
             self.parse_targets(targets, self.settings.get("domain-name"))
         )
 
@@ -74,39 +80,50 @@ class Dispatch:
             return password
         raise ValueError(f"Could not derive password for username {username}")
 
-    def build_targets(self, targets: Set[str]) -> List[Device]:
+    def build_targets(self, targets: Set[str]) -> List[Target]:
         """
-        Builds a list of Device objects consisting of hostname, username, password, and
-        local device variables
+        Builds a list of Target objects consisting of relevant details for connecting
+        to the target
         """
-        device_list = []
-        for device in targets:
-            device_vars = self.device_variables[device.split(".")[0]]
+        target_list = []
+        for target in targets:
+            if target.split(".")[0] in self.variables:
+                target_vars = self.variables[target.split(".")[0]]
+            else:
+                target_vars = self.variables["services"][target]
             username = self.settings["username"]
-            if "username" in device_vars:
-                username = device_vars["username"]
+            if "username" in target_vars:
+                username = target_vars["username"]
             password = self.get_password(username)
 
             if self.secrets:
-                device_vars.update(self.secrets)
-            device_list.append(
-                Device(
-                    hostname=device,
+                target_vars.update(self.secrets)
+            if self.target_type == "device":
+                connector = GnmiDevice
+            else:
+                if target_vars["service-id"] == "megaport":
+                    connector = Megaport
+                elif target_vars["service-id"] == "packetfabric":
+                    connector = PacketFabric
+            target_list.append(
+                Target(
+                    id=target,
                     username=username,
                     password=password,
-                    variables=device_vars,
+                    variables=target_vars,
+                    connector=connector,
                 )
             )
-        return device_list
+        return target_list
 
-    def get_device_variables(self) -> Dict[str, str]:
+    def get_variables(self) -> Dict[str, str]:
         """
-        Get local device variables from vars.yaml
+        Get local device/service variables from vars.yaml
         """
-        device_vars = {}
-        for file in Path(f"{CONFIG_DIR}/devices").rglob("vars.yaml"):
-            device_vars[file.parts[-2]] = YAML().load(open(str(file)))
-        return device_vars
+        vars = {}
+        for file in Path(f"{CONFIG_DIR}/{self.target_type}s").rglob("vars.yaml"):
+            vars[file.parts[-2]] = YAML().load(open(str(file)))
+        return vars
 
     def get_settings(self) -> Optional[Dict[str, str]]:
         """
@@ -122,35 +139,60 @@ class Dispatch:
         """
         Given a list of roles and/or hostnames return a set of hostnames
         """
-        roles = set()
-        for _, device_var in self.device_variables.items():
-            roles.update(device_var["roles"])
-        devices = list(self.device_variables.keys())
 
-        if "all" in targets:
-            return set(devices)
+        def _verify_targets(
+            given_targets: List[str],
+            found_targets: List[str],
+            found_roles: List[str] = [],
+        ):
+            """
+            Generic service/role/device verification function
+            """
+            message_suffix = (
+                self.target_type + " or role"
+                if self.target_type == "device"
+                else self.target_type
+            )
+            for target in given_targets:
+                if target not in found_roles and target not in found_targets:
+                    logger.warning(
+                        "Target '{target}' does not appear to be a "
+                        "{message_suffix}".format(
+                            target=target, message_suffix=message_suffix
+                        )
+                    )
 
-        for target in targets:
-            if target not in roles and target not in devices:
-                raise RuntimeError(
-                    f"Target '{target}' does not appear to be a device or role"
-                )
+        if self.target_type == "device":
+            roles = set()
+            for _, device_vars in self.variables.items():
+                roles.update(device_vars.get("roles", []))
+            devices = list(self.variables.keys())
 
-        target_devices = [
-            f"{target}.{domain_name}" if domain_name else target
-            for target in targets
-            if target in devices
-        ]
-        target_roles = [target for target in targets if target in roles]
-        target_devices_from_roles = []
-        for device, device_vars in self.device_variables.items():
-            if "roles" in device_vars:
-                target_devices_from_roles.extend(
-                    [
-                        f"{device}.{domain_name}" if domain_name else device
-                        for role in target_roles
-                        if role in device_vars["roles"]
-                    ]
-                )
+            if "all" in targets:
+                return set(devices)
 
-        return set(target_devices_from_roles + target_devices)
+            _verify_targets(
+                given_targets=targets, found_targets=devices, found_roles=roles
+            )
+
+            target_devices = [
+                f"{target}.{domain_name}" if domain_name else target
+                for target in targets
+                if target in devices
+            ]
+            target_roles = [target for target in targets if target in roles]
+            target_devices_from_roles = []
+            for device, device_vars in self.variables.items():
+                if "roles" in device_vars:
+                    target_devices_from_roles.extend(
+                        [
+                            f"{device}.{domain_name}" if domain_name else device
+                            for role in target_roles
+                            if role in device_vars["roles"]
+                        ]
+                    )
+
+            return set(target_devices_from_roles + target_devices)
+        services = list(self.variables.keys())
+        _verify_targets(given_targets=targets, found_targets=services)
+        return [target for target in targets if target in services]

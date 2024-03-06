@@ -5,13 +5,13 @@ import logging
 from typing import Any, Literal, List, Tuple, Union, Optional
 from pygnmi import client  # typing: ignore
 from ananke.struct.config import ConfigPack
+from ananke.connectors.shared import Connector
 
 
-WRITE_METHODS = Optional[Literal["update", "replace"]]
 logger = logging.getLogger(__name__)
 
 
-class GnmiDevice:
+class GnmiDevice(Connector):
     """
     Class for interacting with gNMI server. This involves establishing a gNMI session
     and running calls towards the device.
@@ -19,21 +19,19 @@ class GnmiDevice:
 
     def __init__(
         self,
-        hostname: str,
+        target_id: str,
         settings: Any,
         variables: Any,
         username: str,
         password: str,
     ):
-        self.hostname = hostname
-        self.settings = settings
-        self.variables = variables
-        self.config_transform: bool = self._should_transform_config()
+        self.target_id = target_id
+        super().__init__(target=target_id, settings=settings, variables=variables)
         port = 50051
         if gnmi_port := self.variables["management"].get("gnmi-port"):
             port = gnmi_port
         target_dict = {
-            "target": (hostname, port),
+            "target": (target_id, port),
             "username": username,
             "password": password,
         }
@@ -45,42 +43,15 @@ class GnmiDevice:
             target_dict["insecure"] = True
         self.session = client.gNMIclient(**target_dict)
         logger.info(
-            "Creating GnmiDevice instance for {username}@{hostname}:{port} "
+            "Creating GnmiDevice instance for {username}@{target_id}:{port} "
             "with cert {cert}. TLS server name override: {tls_server}".format(
                 username=username,
-                hostname=hostname,
+                target_id=target_id,
                 port=port,
                 cert=cert,
                 tls_server=tls_server,
             )
         )
-
-    def _should_transform_config(self) -> bool:
-        """
-        Inform that this platform has a transform module defined
-        """
-        if "transforms" not in self.settings or not self.settings["transforms"].get(
-            "module-directory"
-        ):
-            return False
-        transform_modules = [
-            str(file.stem)
-            for file in Path(self.settings["transforms"]["module-directory"]).glob(
-                "*.py"
-            )
-            if str(file.stem) != "__init__"
-        ]
-        logger.debug(
-            "Transform modules discovered: {transform_modules}".format(
-                transform_modules=transform_modules
-            )
-        )
-        if self.variables["platform"]["os"].replace("-", "_") in transform_modules:
-            logger.debug(
-                "Transform module matching platform found, marking for transform"
-            )
-            return True
-        return False
 
     def _get_cert(self) -> Optional[str]:
         """
@@ -152,60 +123,23 @@ class GnmiDevice:
         with self.session as session:
             return session.capabilities()
 
-    def _transform_config(self, pack: ConfigPack) -> ConfigPack:
-        """
-        Runs pack through config transform
-        """
-        module_name = self.variables["platform"]["os"].replace("-", "_")
-        logger.debug(
-            "Running transform function from {path}/{mod}".format(
-                path=self.settings["transforms"]["module-directory"], mod=module_name
-            )
-        )
-        import importlib
-
-        transform_module = importlib.import_module(module_name, package=None)
-        transform_function = getattr(transform_module, "transform")
-        return transform_function(pack)
-
-    def push_config(
-        self, write_method: WRITE_METHODS, config: List[ConfigPack], dry_run: bool
-    ) -> Tuple[Union[Any, None], Union[Any, None]]:
-        """
-        Config push method for all or parts of the device config.
-        Args:
-            write_method: Optional write method to use (either update or replace)
-            config: List of ConfigPack objects
-            dry_run: Boolean flag for skipping config push
-        """
-        body = []
-        output = []
-        if (
-            "disable-set" in self.variables["management"]
-            and self.variables["management"]["disable-set"]
-        ):
-            logger.debug(
-                "disable-set enabled for {self.hostname}, skipping".format(
-                    hostname=self.hostname
-                )
-            )
-            return None, None
-        for pack in config:
-            if write_method:
-                pack.write_method = write_method
-            pack = self._transform_config(pack) if self.config_transform else pack
-            body.append(
-                {
-                    "path": pack.path,
-                    "write-method": pack.write_method,
-                    "content": pack.content,
-                }
-            )
-            if not dry_run:
-                output.append(self._set_config(config_pack=pack))
-        return json.dumps(body, indent=2), (
-            json.dumps(output, indent=2) if output else None
-        )
+    # def deploy(
+    #     self, write_method: WRITE_METHODS, config: List[ConfigPack], dry_run: bool
+    # ) -> Tuple[Union[Any, None], Union[Any, None]]:
+    #     """
+    #     Service-specific wrapper for generic shared-deploy function. Mostly here just
+    #     to pass in the custom _set_config() function and present a uniform function
+    #     to dispatch.
+    #     """
+    #     return shared_deploy(
+    #         target=self.target_id,
+    #         variables=self.variables,
+    #         config=config,
+    #         write_method=write_method,
+    #         dry_run=dry_run,
+    #         set_func=self._set_config,
+    #         transform_func=self._transform_config if self.config_transform else None,
+    #     )
 
     def get_config(
         self, path: str, oneline: bool, operational: bool, include_meta: bool = False

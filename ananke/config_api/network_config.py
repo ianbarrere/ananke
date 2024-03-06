@@ -4,11 +4,11 @@ import json
 import logging
 from typing import Any, Optional, Tuple, Union
 from io import StringIO
-from ananke.struct.config import CONFIG_DIR
 from ananke.struct.repo import GitLabRepo, LocalRepo  # type: ignore
 from ananke.struct.vault import Vault  # type: ignore
 
 REPO_TARGET = os.environ.get("ANANKE_REPO_TARGET")
+CONFIG_DIR = os.environ.get("ANANKE_CONFIG")
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,10 @@ class RepoInterface:
         Build and populate vault instance for secrets
         """
         if not CONFIG_DIR:
-            raise ValueError("ANANKE_CONFIG environment variable must be set")
+            raise ValueError(
+                "ANANKE_CONFIG environment variable must be set to build vault. To "
+                "run without vault set the ANANKE_CONFIG_PAT environment variable."
+            )
         vault_secret = os.environ.get("ANANKE_VAULT_SECRET")
         if not vault_secret:
             raise ValueError("ANANKE_VAULT_SECRET env var must be set")

@@ -17,7 +17,16 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ConfigPack:
+    """
+    path: gNMI/REST/other path that defines where the content is going
+    original_content: Original content before transform, sometimes needed late in the
+        game for comparison on fields we don't send
+    content: Modified content after transform
+    write_method: Either replace or update
+    """
+
     path: str
+    original_content: Any
     content: Any
     write_method: Literal["replace", "update"] = "replace"
 
@@ -30,14 +39,14 @@ class Config:
 
     def __init__(
         self,
-        hostname: str,
+        target_id: str,
         settings: Dict[Any, Any],
         variables: Dict[str, str],
         sections: Optional[Tuple[str]] = None,
     ):
         if not CONFIG_DIR:
             raise ValueError("ANANKE_CONFIG environment variable must be set")
-        self.hostname = hostname.split(".")[0]
+        self.target_id = target_id.split(".")[0]
         self.settings = settings
         self.variables = variables
         self.file_paths = defaultdict(list)
@@ -48,8 +57,8 @@ class Config:
         self.merge_paths()
         self.packs: List[ConfigPack] = self.build_packs()
         logger.info(
-            "Config object initialized for {hostname} and section {section}".format(
-                hostname=self.hostname, section=self.sections
+            "Config object initialized for {target_id} and section {section}".format(
+                target_id=self.target_id, section=self.sections
             )
         )
         logger.debug("Global settings: {settings}".format(settings=self.settings))
@@ -61,6 +70,8 @@ class Config:
         """
         Given a tuple of possible paths and/or filenames return a set of only paths
         """
+        if not isinstance(sections, tuple):
+            raise ValueError("Sections must be a tuple of values")
         resolved_sections = set()
         for section in sections:
             if re.search("\.yaml\.j2$", section):
@@ -84,7 +95,7 @@ class Config:
         by all applicable roles, followed by all, in that order.
         """
         files = [file for file in Path(CONFIG_DIR).rglob("*.yaml.j2")]
-        host_files = [str(file) for file in files if file.parts[-2] == self.hostname]
+        host_files = [str(file) for file in files if file.parts[-2] == self.target_id]
         role_files = [str(file) for file in files if file.parts[-2] in self.roles]
         all_files = [str(file) for file in files if file.parts[-2] == "all"]
         logger.debug(
@@ -105,6 +116,9 @@ class Config:
         for file in self._get_files():
             # skip platforms that don't match
             if "_" in file:
+                # skip for services entirely
+                if "service-id" in self.variables:
+                    continue
                 platform = self.variables["platform"]["os"]
                 if (suffix := re.search("_(.*).yaml.j2", file)) and suffix.groups()[
                     0
@@ -187,6 +201,7 @@ class Config:
         packs = [
             ConfigPack(
                 path=path,
+                original_content=dict(content[0]),
                 content=content[0],
                 write_method=write_methods.get(path, write_methods["default"]),
             )
@@ -215,6 +230,7 @@ class Config:
                             packs.append(
                                 ConfigPack(
                                     path=path,
+                                    original_content=dict(content[0]),
                                     content=content[0],
                                     write_method=write_method,
                                 )
@@ -226,11 +242,14 @@ class Config:
                         )
                     )
         if self.sections and not packs:
-            raise ValueError(
-                f"\nCould not find match for given sections '{self.sections}' in "
-                "configured paths or files:\n\n"
-                + "\n".join(list(self.mapping.keys()))
-                + "\n".join(list(self.file_paths.keys()))
+            logger.warning(
+                "Could not find match for target {id} given section {sections} in "
+                "configured paths or files {paths_and_files}, skipping".format(
+                    id=self.target_id,
+                    sections=self.sections,
+                    paths_and_files=list(self.mapping.keys())
+                    + list(self.file_paths.keys()),
+                )
             )
 
         return packs

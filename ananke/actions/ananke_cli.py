@@ -4,17 +4,17 @@ CLI adapter for device interaction
 """
 import click  # type: ignore
 from click_option_group import optgroup, MutuallyExclusiveOptionGroup  # type: ignore
-from ananke.connectors.gnmi import WRITE_METHODS
+from ananke.connectors.shared import WRITE_METHODS
 from ananke.struct.config import Config
 from ananke.struct.dispatch import Dispatch
-from ananke.connectors.gnmi import GnmiDevice
-from typing import Tuple
+from typing import Tuple, Literal
 
 
 main = click.Group(help="Device configurator")
 
 
 @main.command(name="set")
+@click.argument("target_type", type=click.Choice(["device", "service"]))
 @click.argument("targets", nargs=-1)
 @click.option(
     "-s",
@@ -54,6 +54,7 @@ main = click.Group(help="Device configurator")
     help="",
 )
 def config_set(
+    target_type: Literal["device", "service"],
     targets: Tuple[str],
     sections: str,
     method: WRITE_METHODS,
@@ -61,33 +62,33 @@ def config_set(
     dry_run: bool,
 ) -> None:
     """
-    Push config to device(s). Specify space-separated list of hosts and/or
-    roles with an optional config section parameter
+    Push config to devices/services. Specify comma-separated list of hosts, roles,
+    and/or services with an optional config section parameter
     """
     if method not in [None, "replace", "update"]:
         raise ValueError("Method must be replace or update")
     # allow to run with targets from environment variable
     if len(targets) == 1 and " " in targets[0]:
         targets = targets[0].split(" ")
-    dispatch = Dispatch(targets)
-    for target_device in dispatch.target_devices:
+    dispatch = Dispatch(target_type=target_type, targets=targets)
+    for target_device in dispatch.targets:
         config = Config(
-            hostname=target_device.hostname,
+            target_id=target_device.id,
             sections=sections,
             settings=dispatch.settings,
             variables=target_device.variables,
         )
-        device = GnmiDevice(
-            hostname=target_device.hostname,
+        target = target_device.connector(
+            target_id=target_device.id,
             username=target_device.username,
             password=target_device.password,
             settings=dispatch.settings,
             variables=target_device.variables,
         )
-        body, output = device.push_config(method, config.packs, dry_run=dry_run)
+        body, output = target.deploy(method, config.packs, dry_run=dry_run)
         if not body and not output:
             click.secho(
-                f"Config set disabled for {device.hostname}, skipping", fg="yellow"
+                f"Config set disabled for {target.target_id}, skipping", fg="yellow"
             )
             continue
         if debug or dry_run:
@@ -95,7 +96,7 @@ def config_set(
                 click.secho(output, fg="magenta")
             click.secho(body, fg="white")
             continue
-        click.secho(f"Config section(s) pushed to {device.hostname}", fg="cyan")
+        click.secho(f"Config section(s) pushed to {target.target_id}", fg="cyan")
 
 
 @main.command(name="get")
@@ -107,16 +108,16 @@ def gnmi_get(hostname: str, path: str, oneline: bool, operational: bool) -> None
     """
     Get config from device based on gNMI path
     """
-    dispatch = Dispatch([hostname])
-    for device in dispatch.target_devices:
-        gnmi_device = GnmiDevice(
-            hostname=device.hostname,
+    dispatch = Dispatch([hostname], target_type="device")
+    for device in dispatch.targets:
+        connection = device.connector(
+            target_id=device.id,
             username=device.username,
             password=device.password,
             settings=dispatch.settings,
             variables=device.variables,
         )
-        config = gnmi_device.get_config(
+        config = connection.get_config(
             path=path, oneline=oneline, operational=operational
         )
         click.secho(config, fg="white")
