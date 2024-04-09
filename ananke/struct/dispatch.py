@@ -32,7 +32,7 @@ class Dispatch:
         if target_type not in ["device", "service"]:
             raise ValueError("Target type must be one of 'device' or 'service'")
         self.target_type = target_type
-        if targets == ():
+        if not targets:
             targets = [path.parts[-2] for path in self.get_variable_files()]
         self.settings = self.get_settings()
         self.secrets = None

@@ -42,7 +42,7 @@ class Config:
         target_id: str,
         settings: Dict[Any, Any],
         variables: Dict[str, str],
-        sections: Optional[Tuple[str]] = None,
+        sections: Tuple[str] = (),
     ):
         if not CONFIG_DIR:
             raise ValueError("ANANKE_CONFIG environment variable must be set")
