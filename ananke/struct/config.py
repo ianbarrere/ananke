@@ -238,7 +238,10 @@ class Config:
                 else:
                     packs.append(
                         ConfigPack(
-                            path=path, content=content[0], write_method=write_method
+                            path=path,
+                            original_content=dict(content[0]),
+                            content=content[0],
+                            write_method=write_method,
                         )
                     )
         if self.sections and not packs:

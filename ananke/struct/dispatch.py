@@ -28,10 +28,12 @@ class Dispatch:
     list of target objects from list of target hostnames/roles/services
     """
 
-    def __init__(self, targets: List[str], target_type: Literal["device", "service"]):
+    def __init__(self, targets: Tuple[str], target_type: Literal["device", "service"]):
         if target_type not in ["device", "service"]:
             raise ValueError("Target type must be one of 'device' or 'service'")
         self.target_type = target_type
+        if targets == ():
+            targets = [path.parts[-2] for path in self.get_variable_files()]
         self.settings = self.get_settings()
         self.secrets = None
         self.variables: Dict[str, Any] = self.get_variables()
@@ -116,12 +118,21 @@ class Dispatch:
             )
         return target_list
 
+    def get_variable_files(self) -> List[Path]:
+        """
+        Get all variable files
+        """
+        return [
+            path
+            for path in Path(f"{CONFIG_DIR}/{self.target_type}s").rglob("vars.yaml")
+        ]
+
     def get_variables(self) -> Dict[str, str]:
         """
         Get local device/service variables from vars.yaml
         """
         vars = {}
-        for file in Path(f"{CONFIG_DIR}/{self.target_type}s").rglob("vars.yaml"):
+        for file in self.get_variable_files():
             vars[file.parts[-2]] = YAML().load(open(str(file)))
         return vars
 
