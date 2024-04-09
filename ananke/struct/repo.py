@@ -59,6 +59,15 @@ class LocalRepo:
         branches: Iterable = self.repo.branches  # type: ignore
         return [branch.name for branch in branches]
 
+    def diff_branches(self, from_branch: str, to_branch: str) -> Any:
+        """
+        Diff two branches, package inside dict so as to be interchangeable with API
+        format
+        """
+        dest = self.repo.commit(to_branch)
+        source = self.repo.commit(from_branch)
+        return {"diffs": source.diff(dest)}
+
     def list_objects(self, path: Optional[str] = None) -> List[str]:
         """
         Lists the contents of a repo. Takes an optional path for nested objects.
@@ -305,7 +314,9 @@ class GitLabRepo:
         self._api(method="delete", suffix=f"merge_requests/{self.pr_iid}")
 
 
-def get_repo(target: str, token: Optional[str] = None) -> Union[LocalRepo, GitLabRepo]:
+def get_repo(
+    target: str, token: Optional[str] = None, branch: Union[bool, str] = True
+) -> Union[LocalRepo, GitLabRepo]:
     """
     A unified interface for getting a repo back. It returns a LocalRepo if the target
     is a local path and it returns a GitLabRepo if given a numerical target and token
@@ -313,5 +324,5 @@ def get_repo(target: str, token: Optional[str] = None) -> Union[LocalRepo, GitLa
     if target.isnumeric() and not token:
         raise ValueError("If target is a GitLab project ID a token must be supplied")
     if target.isnumeric() and token:
-        return GitLabRepo(target, token)
-    return LocalRepo(target)
+        return GitLabRepo(target, token, branch)
+    return LocalRepo(target, branch)
