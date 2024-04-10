@@ -26,7 +26,7 @@ class GnmiDevice(Connector):
         password: str,
     ):
         self.target_id = target_id
-        super().__init__(target=target_id, settings=settings, variables=variables)
+        super().__init__(settings=settings, variables=variables)
         port = 50051
         if gnmi_port := self.variables["management"].get("gnmi-port"):
             port = gnmi_port

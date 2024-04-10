@@ -72,7 +72,7 @@ logger = logging.getLogger(__name__)
 class AnankeRestResource(Connector):
     def __init__(self, target_id: str, settings: Any, variables: Any):
         self.target_id = target_id
-        super().__init__(target=target_id, settings=settings, variables=variables)
+        super().__init__(settings=settings, variables=variables)
 
     @staticmethod
     def trim_url(url: str, elements: int) -> str:

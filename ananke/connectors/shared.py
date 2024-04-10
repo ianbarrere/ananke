@@ -11,7 +11,7 @@ WRITE_METHODS = Optional[Literal["update", "replace"]]
 
 
 class Connector:
-    def __init__(self, target: str, settings: Any, variables: Any):
+    def __init__(self, settings: Any, variables: Any):
         self.settings = settings
         self.variables = variables
         self.config_transform: bool = self.should_transform_config()
@@ -79,11 +79,7 @@ class Connector:
             and "disable-set" in self.variables["management"]
             and self.variables["management"]["disable-set"]
         ):
-            logger.debug(
-                f"disable-set enabled for {self.target}, skipping".format(
-                    target=self.target
-                )
-            )
+            logger.debug("disable-set enabled for {}, skipping".format(self.target_id))
             return None, None
         for pack in config:
             if write_method:
