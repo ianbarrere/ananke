@@ -74,13 +74,6 @@ class Connector:
         """
         body = []
         output = []
-        if (
-            "management" in self.variables
-            and "disable-set" in self.variables["management"]
-            and self.variables["management"]["disable-set"]
-        ):
-            logger.debug("disable-set enabled for {}, skipping".format(self.target_id))
-            return None, None
         for pack in config:
             if write_method:
                 pack.write_method = write_method
@@ -93,6 +86,15 @@ class Connector:
                 }
             )
             if not dry_run:
+                if (
+                    "management" in self.variables
+                    and "disable-set" in self.variables["management"]
+                    and self.variables["management"]["disable-set"]
+                ):
+                    logger.debug(
+                        "disable-set enabled for {}, skipping".format(self.target_id)
+                    )
+                    return None, None
                 output.append(self._set_config(config_pack=pack))
         return json.dumps(body, indent=2), (
             json.dumps(output, indent=2) if output else None
