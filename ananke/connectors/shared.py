@@ -80,6 +80,7 @@ class Connector:
             pack = self._transform_config(pack) if self.config_transform else pack
             body.append(
                 {
+                    "target": pack.target_id,
                     "path": pack.path,
                     "write-method": pack.write_method,
                     "content": pack.content,
