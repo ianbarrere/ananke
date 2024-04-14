@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ConfigPack:
     """
-    hostname: Device hostname that the config corresponds to
     path: gNMI/REST/other path that defines where the content is going
     original_content: Original content before transform, sometimes needed late in the
         game for comparison on fields we don't send
@@ -26,7 +25,6 @@ class ConfigPack:
     write_method: Either replace or update
     """
 
-    target_id: str
     path: str
     original_content: Any
     content: Any
@@ -202,7 +200,6 @@ class Config:
         write_methods = self.settings["write-methods"]
         packs = [
             ConfigPack(
-                target_id=self.target_id,
                 path=path,
                 original_content=dict(content[0]),
                 content=content[0],
@@ -232,7 +229,6 @@ class Config:
                         if section in path:
                             packs.append(
                                 ConfigPack(
-                                    target_id=self.target_id,
                                     path=path,
                                     original_content=dict(content[0]),
                                     content=content[0],
@@ -242,7 +238,6 @@ class Config:
                 else:
                     packs.append(
                         ConfigPack(
-                            target_id=self.target_id,
                             path=path,
                             original_content=dict(content[0]),
                             content=content[0],
