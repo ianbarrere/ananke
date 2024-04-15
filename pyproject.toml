@@ -1,6 +1,6 @@
 [project]
 name = "ananke"
 description = "Lightweight, model-driven network automation stack"
-version = "0.3.4"
+version = "1.0.0"
 [tool.setuptools.package-data]
 "ananke" = ["py.typed"]

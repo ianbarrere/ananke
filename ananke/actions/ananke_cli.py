@@ -2,15 +2,31 @@
 """
 CLI adapter for device interaction
 """
+import json
 import click  # type: ignore
+import logging
 from click_option_group import optgroup, MutuallyExclusiveOptionGroup  # type: ignore
 from ananke.connectors.shared import WRITE_METHODS
-from ananke.struct.config import Config
 from ananke.struct.dispatch import Dispatch
-from typing import Tuple, Literal
+from typing import Tuple, Literal, Any
+from colorama import Fore, Style
+from time import sleep
 
 
 main = click.Group(help="Device configurator")
+
+logger = logging.getLogger(__name__)
+
+
+def color_results(prefix: str, message: str, message_color: Any) -> str:
+    return (
+        Fore.WHITE
+        + Style.DIM
+        + f"{prefix}: "
+        + Style.RESET_ALL
+        + message_color
+        + message
+    )
 
 
 @main.command(name="set")
@@ -70,33 +86,53 @@ def config_set(
     # allow to run with targets from environment variable
     if len(targets) == 1 and " " in targets[0]:
         targets = targets[0].split(" ")
+    targets = (
+        {target: set(sections) for target in targets}
+        if targets
+        else {None: set(sections)}
+    )
     dispatch = Dispatch(target_type=target_type, targets=targets)
-    for target_device in dispatch.targets:
-        config = Config(
-            target_id=target_device.id,
-            sections=sections,
-            settings=dispatch.settings,
-            variables=target_device.variables,
+    dispatch.concurrent_deploy(method, dry_run)
+    retry = 300
+    wait_time = 0.2
+    total = 300 * 0.2
+    while len(dispatch.deploy_results) != len(dispatch.targets) and retry > 0:
+        print(dispatch.deploy_results)
+        sleep(wait_time)
+        retry -= 1
+    if len(dispatch.deploy_results) != len(dispatch.targets):
+        message = "Deploy did not complete after {} seconds\nDeploy results: {}".format(
+            total, dispatch.deploy_results
         )
-        target = target_device.connector(
-            target_id=target_device.id,
-            username=target_device.username,
-            password=target_device.password,
-            settings=dispatch.settings,
-            variables=target_device.variables,
-        )
-        body, output = target.deploy(method, config.packs, dry_run=dry_run)
-        if not body and not output:
-            click.secho(
-                f"Config set disabled for {target.target_id}, skipping", fg="yellow"
+        logger.error(message)
+        raise RuntimeError(message)
+    fg_translate = {1: Fore.RED, 2: Fore.YELLOW, 3: Fore.WHITE}
+    for result in dispatch.deploy_results:
+        click.echo(color_results("target", result.source, Fore.CYAN))
+        if dry_run or debug:
+            click.echo(
+                color_results("config", json.dumps(result.body, indent=2), Fore.WHITE)
             )
-            continue
-        if debug or dry_run:
-            if output:
-                click.secho(output, fg="magenta")
-            click.secho(body, fg="white")
-            continue
-        click.secho(f"Config section(s) pushed to {target.target_id}", fg="cyan")
+        if debug:
+            click.echo(
+                color_results(
+                    "device response", json.dumps(result.output, indent=2), Fore.MAGENTA
+                )
+            )
+            for message in result.messages:
+                click.echo(
+                    color_results(
+                        "message", message.text, fg_translate[message.priority]
+                    )
+                )
+        else:
+            min_priority = min([message.priority for message in result.messages])
+            message = "Config section(s) pushed to device"
+            if min_priority == 1:
+                message = "One or more config sections failed"
+            elif min_priority in [2, 3]:
+                message = result.messages[0].text
+            click.echo(color_results("message", message, fg_translate[min_priority]))
 
 
 @main.command(name="get")
@@ -108,19 +144,12 @@ def gnmi_get(hostname: str, path: str, oneline: bool, operational: bool) -> None
     """
     Get config from device based on gNMI path
     """
-    dispatch = Dispatch([hostname], target_type="device")
-    for device in dispatch.targets:
-        connection = device.connector(
-            target_id=device.id,
-            username=device.username,
-            password=device.password,
-            settings=dispatch.settings,
-            variables=device.variables,
-        )
-        config = connection.get_config(
-            path=path, oneline=oneline, operational=operational
-        )
-        click.secho(config, fg="white")
+    dispatch = Dispatch([hostname], target_type="device", sections=())
+
+    target = dispatch.targets[0]
+    connection = target.connector
+    config = connection.get_config(path=path, oneline=oneline, operational=operational)
+    click.secho(config, fg="white")
 
 
 if __name__ == "__main__":

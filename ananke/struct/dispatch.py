@@ -1,11 +1,14 @@
-from pathlib import Path
-from ruamel.yaml import YAML  # type: ignore
 import os
 import logging
+import concurrent.futures
+from pathlib import Path
+from ruamel.yaml import YAML  # type: ignore
 from dataclasses import dataclass
 from typing import Any, Tuple, Dict, List, Optional, Set, Union, Literal
+from ananke.struct.config import Config
 from ananke.connectors.gnmi import GnmiDevice
 from ananke.connectors.services import PacketFabric, Megaport
+from ananke.connectors.shared import Connector, AnankeResponse
 
 CONFIG_PACK = Tuple[str, Any]
 CONFIG_DIR = os.environ.get("ANANKE_CONFIG")
@@ -15,11 +18,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Target:
-    id: str
-    username: str
-    password: str
-    variables: Dict[str, str]
     connector: Union[GnmiDevice, PacketFabric, Megaport]
+    config: Config
 
 
 class Dispatch:
@@ -28,20 +28,36 @@ class Dispatch:
     list of target objects from list of target hostnames/roles/services
     """
 
-    def __init__(self, targets: Tuple[str], target_type: Literal["device", "service"]):
+    def __init__(
+        self,
+        targets: Dict[Optional[str], Set[str]],
+        target_type: Literal["device", "service"],
+    ):
         if target_type not in ["device", "service"]:
             raise ValueError("Target type must be one of 'device' or 'service'")
         self.target_type = target_type
-        if not targets:
-            targets = [path.parts[-2] for path in self.get_variable_files()]
         self.settings = self.get_settings()
         self.secrets = None
         self.variables: Dict[str, Any] = self.get_variables()
         if self.settings["vault"]:
             self.secrets = self.build_vault()
-        self.targets: List[Target] = self.build_targets(
-            self.parse_targets(targets, self.settings.get("domain-name"))
-        )
+        parsed_targets = self.parse_targets(targets, self.settings.get("domain-name"))
+        self.targets: List[Target] = self.build_targets(targets=parsed_targets)
+
+    def concurrent_deploy(self, method: str, dry_run: bool) -> List[AnankeResponse]:
+        """
+        Deploy config for all targets concurrently
+        """
+        self.deploy_results: List[AnankeResponse] = []
+        iter_len = range(len(self.targets))
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            for result in executor.map(
+                Connector.deploy,
+                self.targets,
+                [method for _ in iter_len],
+                [dry_run for _ in iter_len],
+            ):
+                self.deploy_results.append(result)
 
     def build_vault(self) -> Dict[str, str]:
         """
@@ -65,57 +81,38 @@ class Dispatch:
             vault_secret=vault_secret,
         ).keys
 
-    def get_password(self, username: str) -> str:
-        """
-        Attempts to get a password for a given username either from vault or defined
-        environment variables.
-        """
-        if self.secrets:
-            if password := self.secrets.get(f"ANANKE_CONNECTOR_PASSWORD_{username}"):
-                return password
-            elif password := self.secrets.get("ANANKE_CONNECTOR_PASSWORD"):
-                return password
-
-        if password := os.environ.get(f"ANANKE_CONNECTOR_PASSWORD_{username}"):
-            return password
-        elif password := os.environ.get("ANANKE_CONNECTOR_PASSWORD"):
-            return password
-        raise ValueError(f"Could not derive password for username {username}")
-
-    def build_targets(self, targets: Set[str]) -> List[Target]:
+    def build_targets(self, targets: Dict[Optional[str], Set[str]]) -> List[Target]:
         """
         Builds a list of Target objects consisting of relevant details for connecting
         to the target
         """
         target_list = []
-        for target in targets:
+        for target, sections in targets.items():
             if target.split(".")[0] in self.variables:
                 target_vars = self.variables[target.split(".")[0]]
             else:
                 target_vars = self.variables["services"][target]
-            username = self.settings["username"]
-            if "username" in target_vars:
-                username = target_vars["username"]
-            password = self.get_password(username)
 
             if self.secrets:
                 target_vars.update(self.secrets)
+            config = Config(
+                target_id=target,
+                sections=sections,
+                settings=self.settings,
+                variables=target_vars,
+            )
             if self.target_type == "device":
-                connector = GnmiDevice
+                connector = GnmiDevice(
+                    target_id=target,
+                    config=config,
+                )
             else:
                 if target_vars["service-id"] == "megaport":
-                    connector = Megaport
+                    connector = Megaport(target_id=target, config=config)
                 elif target_vars["service-id"] == "packetfabric":
-                    connector = PacketFabric
-            target_list.append(
-                Target(
-                    id=target,
-                    username=username,
-                    password=password,
-                    variables=target_vars,
-                    connector=connector,
-                )
-            )
+                    connector = PacketFabric(target_id=target, config=config)
+            target = Target(connector=connector, config=config)
+            target_list.append(target)
         return target_list
 
     def get_variable_files(self) -> List[Path]:
@@ -146,7 +143,9 @@ class Dispatch:
             yaml = YAML()
             return yaml.load(open(f"{CONFIG_DIR}/settings.yaml"))
 
-    def parse_targets(self, targets: List[str], domain_name: Optional[str]) -> Set[str]:
+    def parse_targets(
+        self, targets: Dict[Optional[str], Set[str]], domain_name: Optional[str]
+    ) -> Set[str]:
         """
         Given a list of roles and/or hostnames return a set of hostnames
         """
@@ -164,7 +163,7 @@ class Dispatch:
                 if self.target_type == "device"
                 else self.target_type
             )
-            for target in given_targets:
+            for target, _ in given_targets.items():
                 if target not in found_roles and target not in found_targets:
                     logger.warning(
                         "Target '{target}' does not appear to be a "
@@ -172,6 +171,11 @@ class Dispatch:
                             target=target, message_suffix=message_suffix
                         )
                     )
+
+        if list(targets.keys()) == [None]:
+            targets = {
+                path.parts[-2]: targets[None] for path in self.get_variable_files()
+            }
 
         if self.target_type == "device":
             roles = set()
@@ -186,24 +190,34 @@ class Dispatch:
                 given_targets=targets, found_targets=devices, found_roles=roles
             )
 
-            target_devices = [
-                f"{target}.{domain_name}" if domain_name else target
-                for target in targets
+            target_devices = {
+                f"{target}.{domain_name}": sections if domain_name else target
+                for target, sections in targets.items()
                 if target in devices
-            ]
-            target_roles = [target for target in targets if target in roles]
-            target_devices_from_roles = []
+            }
+            target_roles = {
+                target: sections
+                for target, sections in targets.items()
+                if target in roles
+            }
+            target_devices_from_roles = {}
             for device, device_vars in self.variables.items():
                 if "roles" in device_vars:
-                    target_devices_from_roles.extend(
-                        [
-                            f"{device}.{domain_name}" if domain_name else device
-                            for role in target_roles
+                    target_devices_from_roles.update(
+                        {
+                            (
+                                f"{device}.{domain_name}" if domain_name else device
+                            ): sections
+                            for role, sections in target_roles.items()
                             if role in device_vars["roles"]
-                        ]
+                        }
                     )
 
-            return set(target_devices_from_roles + target_devices)
+            return {**target_devices_from_roles, **target_devices}
         services = list(self.variables.keys())
         _verify_targets(given_targets=targets, found_targets=services)
-        return [target for target in targets if target in services]
+        return {
+            target: sections
+            for target, sections in targets.items()
+            if target in services
+        }

@@ -353,29 +353,26 @@ A combination of these techniques can be used, and the password is username-spec
 ## Dispatch API
 The software can be called with the [ananke_cli.py](./ananke/actions/ananke_cli.py) tool, but you can also bypass that and integrate
 it directly with other software by importing the Dispatch object from [dispatch.py](./ananke/struct/dispatch.py).
-An example of how this is done is in the ananke_cli.py tool:
+An example of how this is done:
 
 ```python
 from ananke.struct.dispatch import Dispatch
-from ananke.struct.config import Config
 
-dispatch = Dispatch(["device1"])
-for device in dispatch.target_devices:
-    config = Config(
-        hostname=device.hostname,
-        sections=section,
-        settings=dispatch.settings,
-        variables=device.variables,
-    )
-    device = device.connector(
-        hostname=device.hostname,
-        username=device.username,
-        password=device.password,
-        settings=dispatch.settings,
-        variables=device.variables,
-    )
-    body, result = device.push_config("replace", config.packs)
+targets = {
+  "device1": set("interfaces", "bgp")
+}
+dispatch = Dispatch(target_type="device", targets=targets)
+dispatch.concurrent_deploy(method, dry_run)
+while len(dispatch.deploy_results) != len(dispatch.targets) and retry > 0:
+    sleep(0.2)
+print(dispatch.deploy_results)
 ```
+
+The targets argument to Dispatch() takes a dict with devices as keys and sections to
+deploy for those devices.
+
+The concurrent_deploy() method uses map() from concurrent.futures.ProcessPoolExecutor()
+to deploy the config to the given targets concurrently.
 
 ## Config API
 Ananke provides a framework for programmatic config modification. A lot of the work still

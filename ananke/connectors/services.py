@@ -4,10 +4,10 @@ import re
 # import google.auth.transport.requests
 import logging
 from time import sleep
-from typing import List, Any, Dict, Optional, Literal
+from typing import List, Any
 
 # from google.oauth2 import service_account
-from ananke.struct.config import ConfigPack
+from ananke.struct.config import Config, ConfigPack
 from ananke.connectors.shared import Connector
 from ananke.struct.util import MegaportAuth
 
@@ -70,9 +70,8 @@ logger = logging.getLogger(__name__)
 
 
 class AnankeRestResource(Connector):
-    def __init__(self, target_id: str, settings: Any, variables: Any):
-        self.target_id = target_id
-        super().__init__(settings=settings, variables=variables)
+    def __init__(self, target_id: str, config: Config):
+        super().__init__(config=config, target_id=target_id)
 
     @staticmethod
     def trim_url(url: str, elements: int) -> str:
@@ -112,17 +111,8 @@ class AnankeRestResource(Connector):
 
 
 class PacketFabric(AnankeRestResource):
-    def __init__(
-        self,
-        target_id: str,
-        settings: Any,
-        variables: Any,
-        username: str,
-        password: str,
-    ):
-        self.target_id = target_id
-        self.settings = settings
-        self.variables = variables
+    def __init__(self, target_id: str, config: Config):
+        super().__init__(config=config, target_id=target_id)
         self.headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.variables['ANANKE_PACKETFABRIC_API_KEY']}",
@@ -130,7 +120,6 @@ class PacketFabric(AnankeRestResource):
         assert (
             self.variables["service-id"] == "packetfabric"
         ), f"Service {self.target_id} does not appear to be a PacketFabric service"
-        super().__init__(target_id=target_id, settings=settings, variables=variables)
 
     def _populate_headers(self):
         raise NotImplementedError("Headers are pre-populated for PacketFabric")
@@ -194,18 +183,12 @@ class Megaport(AnankeRestResource):
     def __init__(
         self,
         target_id: str,
-        settings: Any,
-        variables: Any,
-        username: str,
-        password: str,
+        config: Config,
         staging: bool = True,
     ):
-        self.target_id = target_id
-        self.settings = settings
-        self.variables = variables
+        super().__init__(config=config, target_id=target_id)
         self.staging = staging
         self.headers = {}
-        super().__init__(target_id=target_id, settings=settings, variables=variables)
         assert (
             self.variables["service-id"] == "megaport"
         ), f"Service {self.target_id} does not appear to be a Megaport service"

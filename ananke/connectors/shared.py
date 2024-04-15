@@ -1,8 +1,10 @@
-import json
+import os
 import logging
 from pathlib import Path
 from typing import Any, List, Tuple, Union, Optional, Literal
-from ananke.struct.config import ConfigPack
+from dataclasses import dataclass, field
+from ananke.struct.config import Config, ConfigPack
+from pygnmi.client import gNMIException
 
 logger = logging.getLogger(__name__)
 
@@ -10,10 +12,43 @@ logger = logging.getLogger(__name__)
 WRITE_METHODS = Optional[Literal["update", "replace"]]
 
 
+@dataclass
+class AnankeResponseMessage:
+    text: str
+    priority: Literal[1, 2, 3] = 3
+
+
+@dataclass
+class AnankeResponse:
+    source: str
+    messages: List[AnankeResponseMessage] = field(default_factory=list)
+    body: List[Any] = field(default_factory=list)
+    output: List[Any] = field(default_factory=list)
+
+
+def get_password(username: str, variables: Any) -> str:
+    """
+    Attempts to get a password for a given username either from variables or defined
+    environment variables.
+    """
+    if password := variables.get(f"ANANKE_CONNECTOR_PASSWORD_{username}"):
+        return password
+    elif password := variables.get("ANANKE_CONNECTOR_PASSWORD"):
+        return password
+
+    if password := os.environ.get(f"ANANKE_CONNECTOR_PASSWORD_{username}"):
+        return password
+    elif password := os.environ.get("ANANKE_CONNECTOR_PASSWORD"):
+        return password
+    raise ValueError(f"Could not derive password for username {username}")
+
+
 class Connector:
-    def __init__(self, settings: Any, variables: Any):
-        self.settings = settings
-        self.variables = variables
+    def __init__(self, target_id: str, config: Config):
+        self.target_id = target_id
+        self.config = config
+        self.settings = config.settings
+        self.variables = config.variables
         self.config_transform: bool = self.should_transform_config()
 
     def should_transform_config(self) -> bool:
@@ -65,20 +100,30 @@ class Connector:
         transform_function = getattr(transform_module, "transform")
         return transform_function(pack)
 
+    @staticmethod
     def deploy(
-        self, write_method: WRITE_METHODS, config: List[ConfigPack], dry_run: bool
-    ) -> Tuple[Union[Any, None], Union[Any, None]]:
+        target: Any,  # classifying as any to avoid circular imports with dispatch
+        write_method: WRITE_METHODS,
+        dry_run: bool,
+    ) -> None:
         """
-        Shared deploy function used by all connectors. Runs through some logic and returns
-        data in a predefined format for reuse with all connectors.
+        Shared deploy function used by all connectors. Designed to run in parallel from
+        dispatch executor. Static method so that the ThreadPoolExecutor can run it in a
+        map as an uninstantiated method with an instance passed in.
         """
-        body = []
-        output = []
-        for pack in config:
+        logger.debug(
+            "Starting deploy process for {}".format(target.connector.target_id)
+        )
+        response = AnankeResponse(target.connector.target_id)
+        for pack in target.config.packs:
             if write_method:
                 pack.write_method = write_method
-            pack = self._transform_config(pack) if self.config_transform else pack
-            body.append(
+            pack = (
+                target.connector._transform_config(pack)
+                if target.connector.config_transform
+                else pack
+            )
+            response.body.append(
                 {
                     "path": pack.path,
                     "write-method": pack.write_method,
@@ -87,15 +132,38 @@ class Connector:
             )
             if not dry_run:
                 if (
-                    "management" in self.variables
-                    and "disable-set" in self.variables["management"]
-                    and self.variables["management"]["disable-set"]
+                    "management" in target.config.variables
+                    and "disable-set" in target.config.variables["management"]
+                    and target.config.variables["management"]["disable-set"]
                 ):
                     logger.debug(
-                        "disable-set enabled for {}, skipping".format(self.target_id)
+                        "disable-set enabled for {}, skipping".format(
+                            target.connector.target_id
+                        )
                     )
-                    return None, None
-                output.append(self._set_config(config_pack=pack))
-        return json.dumps(body, indent=2), (
-            json.dumps(output, indent=2) if output else None
-        )
+                    response.messages.append(
+                        AnankeResponseMessage(
+                            text="Write disabled, skipping", priority=2
+                        )
+                    )
+                else:
+                    try:
+                        logger.debug("Deploying config pack {}".format(pack.path))
+                        response.output.append(
+                            target.connector._set_config(config_pack=pack)
+                        )
+                        response.messages.append(
+                            AnankeResponseMessage(
+                                text=f"Config for {pack.path} pushed to device"
+                            )
+                        )
+                    except gNMIException as err:
+                        response.messages.append(
+                            AnankeResponseMessage(
+                                text=f"Config for {pack.path} failed: Error: {err}",
+                                priority=1,
+                            )
+                        )
+            else:
+                response.messages.append(AnankeResponseMessage(text="Config dry-run"))
+        return response

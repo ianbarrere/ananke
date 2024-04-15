@@ -4,8 +4,8 @@ from pathlib import Path
 import logging
 from typing import Any, Literal, List, Tuple, Union, Optional
 from pygnmi import client  # typing: ignore
-from ananke.struct.config import ConfigPack
-from ananke.connectors.shared import Connector
+from ananke.struct.config import Config, ConfigPack
+from ananke.connectors.shared import Connector, get_password
 
 
 logger = logging.getLogger(__name__)
@@ -17,19 +17,16 @@ class GnmiDevice(Connector):
     and running calls towards the device.
     """
 
-    def __init__(
-        self,
-        target_id: str,
-        settings: Any,
-        variables: Any,
-        username: str,
-        password: str,
-    ):
-        self.target_id = target_id
-        super().__init__(settings=settings, variables=variables)
+    def __init__(self, target_id: str, config: Config):
+        super().__init__(config=config, target_id=target_id)
+        self.config = config
         port = 50051
         if gnmi_port := self.variables["management"].get("gnmi-port"):
             port = gnmi_port
+        username = self.settings["username"]
+        if "username" in config.variables:
+            username = config.variables["username"]
+        password = get_password(username, config.variables)
         target_dict = {
             "target": (target_id, port),
             "username": username,

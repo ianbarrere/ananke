@@ -66,12 +66,12 @@ class Config:
         logger.debug("Device roles: {roles}".format(roles=self.roles))
         logger.debug("Config content: {packs}".format(packs=self.packs))
 
-    def _resolve_sections(self, sections: Tuple[str]) -> Set[str]:
+    def _resolve_sections(self, sections: Set[str]) -> Set[str]:
         """
-        Given a tuple of possible paths and/or filenames return a set of only paths
+        Given a set of possible paths and/or filenames return a set of only paths
         """
-        if not isinstance(sections, tuple):
-            raise ValueError("Sections must be a tuple of values")
+        if not isinstance(sections, set):
+            raise ValueError("Sections must be a set of values")
         resolved_sections = set()
         for section in sections:
             if re.search("\.yaml\.j2$", section):
