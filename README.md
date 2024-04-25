@@ -19,10 +19,12 @@ Your actual device configs should be stored in a separate repo. This repo is ref
 with the environment variable $ANANKE_CONFIG, and it should be of a structure similar to
 the example [here](./ananke/sample/config-repo/).
 
-There should be exactly two directories in your config repo, one called "devices" and
+There should be at least two directories in your config repo, one called "devices" and
 another called "roles". The devices directory is rather self-explanatory, with a directory
 per device. The roles directory has shared content that is inherited by a device via the
-[device's roles](#roles), similarly to Ansible.
+[device's roles](#roles), similarly to Ansible. You can have a third directory called
+"services" if using Ananke's Megaport/PacketFabric integration, under which there should
+be a subdirectory named after the service you're integrating with (megaport or packetfabric).
 
 The devices directory can be hierarchical, in that you can have subdirectories for sites
 or org units, but the penultimate item in the path should always be the device itself,
@@ -67,7 +69,9 @@ less powerful) to more complex (and more powerful).
   With this, you can generate portions of config standalone or pulling from variables stored
   in the device vars.yaml files (or elsewhere) similarly to Ansible. This allows you to do
   things like generate large lists of BGP neighbors or interfaces based on fairly small
-  definitions. It's a bit more powerful, but also limited and static.
+  definitions. It's a bit more powerful, but also limited and static. Likewise, the presence
+  of jinja syntax in your config files prevents you from interacting with the config in
+  python.
 
 3) The third tier is using Ananke's NetworkConfig API to manage your device configs with
   external tools. This of course requires some programming knowledge, and the development
@@ -103,17 +107,18 @@ apply to.
 |-----|-------|
 |-s|The -s flag allows you to supply a free-form string which is matched against the gNMI path or filenames associated with the device. This allows you to send only some portions of the config if desired. You can provide multiple matches with repeated -s flags|
 |-m|The -m flag allows you to update the config rather than replace it, the default is a replace operation unless otherwise specified in the settings.yaml file.|
-|-d|The -d flag returns the JSON body that was sent to the device|
-|-D|The -D flag runs in "dry-run" mode, which prints the JSON body without actually sending anything to the device.|
+|-d|The -d flag returns the JSON formatted config sent to the target as well as the target's response|
+|-D|The -D flag runs in "dry-run" mode, which prints the JSON body without actually sending anything to the target.|
 
 ### get
-The get command will return the contents at a given path
+The get command will run a gNMI get operation and return the contents at a given path
 
     ./ananke/actions/ananke_cli.py get device1 openconfig:/interfaces
 
 |Flag|Function|
 |-----|-------|
 |-O|The -O flag returns the content without line breaks, which is sometimes useful for programmatic purposes.|
+|-o|The -o flag returns operational data as well as config data. The default is only config data.|
 
 ## Config Section Matching
 The Config object takes an optional sections argument which is a tuple of free-form string
@@ -154,7 +159,6 @@ platform:
   os: "cisco-xr" # same as netmiko device types except with - instead of _
 management:
   ip: 10.0.0.1 # management IP
-  mask: 23 # management prefix length
   username: "root" # username to log into device
   gnmi-port: 57777 # gNMI port
   certificate: "myhost.pem" # custom certificate name if different from global
