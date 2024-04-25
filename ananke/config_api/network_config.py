@@ -42,9 +42,21 @@ class RepoInterface:
         else:
             self.repo = repo
         self.yaml = self._create_yaml_object()
-        self.repo_devices = self.repo.list_objects(path="devices")
-        self.repo_roles = self.repo.list_objects(path="roles")
-        self.repo_objects = self.repo_devices + self.repo_roles
+        self.repo_objects = self.repo.list_objects()
+        self.repo_devices = set(
+            [
+                object.parts[-2]
+                for object in self.repo_objects
+                if object.suffix == ".j2" and object.parts[0] == "devices"
+            ]
+        )
+        self.repo_roles = set(
+            [
+                object.parts[-2]
+                for object in self.repo_objects
+                if object.suffix == ".j2" and object.parts[0] == "roles"
+            ]
+        )
 
     def _populate_settings(self) -> Any:
         """

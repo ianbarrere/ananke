@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import datetime
 from typing import Any, Optional, Literal, List, Dict, Union, Iterable
+from pathlib import Path, PosixPath
 
 
 def get_branch_name() -> str:
@@ -23,7 +24,6 @@ class LocalRepo:
     """
 
     from git import Repo  # type: ignore
-    from pathlib import Path, PosixPath
     import os
 
     def __init__(self, repo_dir: str, branch: Union[bool, str] = True):
@@ -68,30 +68,11 @@ class LocalRepo:
         source = self.repo.commit(from_branch)
         return {"diffs": source.diff(dest)}
 
-    def list_objects(self, path: Optional[str] = None) -> List[str]:
+    def list_objects(self) -> List[str]:
         """
-        Lists the contents of a repo. Takes an optional path for nested objects.
+        Lists the contents of a repo.
         """
-
-        def _get_path_depth(paths: List[self.PosixPath]) -> int:
-            """
-            Determine maximum directory depth for a given path, required to figure out
-            which element represents the hostname
-            """
-            return max(len(path.parts) for path in paths if path.is_dir())
-
-        paths = [
-            path
-            for path in self.Path(
-                f"{self.repo_dir}/" if not path else f"{self.repo_dir}/{path}/"
-            ).rglob("*")
-        ]
-        depth = _get_path_depth(paths)
-        return [
-            self.Path(path).parts[-1]
-            for path in paths
-            if len(self.Path(path).parts) == depth
-        ]
+        return [path for path in Path(f"{self.repo_dir}/").rglob("*")]
 
     def update_file(
         self,
@@ -215,33 +196,26 @@ class GitLabRepo:
         )
         return response.content
 
-    def list_objects(self, path: Optional[str] = None) -> List[str]:
+    def list_objects(self) -> List[PosixPath]:
         """
-        Lists the contents of a repo. Takes an optional path for nested objects.
+        Lists the contents of a repo.
         """
-
-        def _get_path_depth(response: Any) -> int:
-            """
-            Determine maximum directory depth for a given path, required to figure out
-            which element represents the hostname
-            """
-            return max(
-                len(object["path"].split("/"))
-                for object in response.json()
-                if object["type"] == "tree"
-            )
-
         response = self._api(
             method="get",
-            params={"path": path, "recursive": True},
-            suffix=f"repository/tree",
+            params={"recursive": True, "per_page": 100},
+            suffix="repository/tree",
         )
-        depth = _get_path_depth(response)
-        return [
-            object["name"]
-            for object in response.json()
-            if object["type"] == "tree" and len(object["path"].split("/")) == depth
-        ]
+        objects = [Path(object["path"]) for object in response.json()]
+        page = 1
+        while page < int(response.headers["x-total-pages"]):
+            page += 1
+            response = self._api(
+                method="get",
+                params={"recursive": True, "per_page": 100, "page": page},
+                suffix="repository/tree",
+            )
+            objects.extend([Path(object["path"]) for object in response.json()])
+        return objects
 
     def update_file(
         self,
