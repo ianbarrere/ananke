@@ -93,9 +93,9 @@ def config_set(
     )
     dispatch = Dispatch(target_type=target_type, targets=targets)
     dispatch.concurrent_deploy(method, dry_run)
-    retry = 300
+    retry = 1000
     wait_time = 0.2
-    total = 300 * 0.2
+    total = retry * wait_time
     while len(dispatch.deploy_results) != len(dispatch.targets) and retry > 0:
         print(dispatch.deploy_results)
         sleep(wait_time)
@@ -144,7 +144,8 @@ def gnmi_get(hostname: str, path: str, oneline: bool, operational: bool) -> None
     """
     Get config from device based on gNMI path
     """
-    dispatch = Dispatch([hostname], target_type="device", sections=())
+    target = {hostname: set()}
+    dispatch = Dispatch(targets=target, target_type="device")
 
     target = dispatch.targets[0]
     connection = target.connector

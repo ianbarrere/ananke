@@ -7,7 +7,7 @@ from pathlib import Path, PosixPath
 from ruamel.yaml import YAML  # type: ignore
 from dataclasses import dataclass, field
 from collections import defaultdict
-from typing import Any, Tuple, Dict, List, Optional, Set, Literal
+from typing import Any, Tuple, Dict, List, Set, Literal
 
 CONFIG_PACK = Tuple[str, Any]
 CONFIG_DIR = os.environ.get("ANANKE_CONFIG")
