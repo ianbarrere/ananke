@@ -116,6 +116,8 @@ class Connector:
         )
         response = AnankeResponse(target.connector.target_id)
         for pack in target.config.packs:
+            if dry_run:
+                pack.tags.append("dry-run")
             if write_method:
                 pack.write_method = write_method
             pack = (

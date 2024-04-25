@@ -5,7 +5,7 @@ import os
 import logging
 from pathlib import Path, PosixPath
 from ruamel.yaml import YAML  # type: ignore
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections import defaultdict
 from typing import Any, Tuple, Dict, List, Optional, Set, Literal
 
@@ -29,6 +29,7 @@ class ConfigPack:
     original_content: Any
     content: Any
     write_method: Literal["replace", "update"] = "replace"
+    tags: List[str] = field(default_factory=list)
 
 
 class Config:
