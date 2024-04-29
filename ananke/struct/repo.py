@@ -68,11 +68,11 @@ class LocalRepo:
         source = self.repo.commit(from_branch)
         return {"diffs": source.diff(dest)}
 
-    def list_objects(self) -> List[str]:
+    def list_objects(self) -> List[PosixPath]:
         """
         Lists the contents of a repo.
         """
-        return [path for path in Path(f"{self.repo_dir}/").rglob("*")]
+        return [Path(path) for path in Path(f"{self.repo_dir}/").rglob("*")]
 
     def update_file(
         self,
