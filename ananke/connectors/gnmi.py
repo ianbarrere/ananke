@@ -145,11 +145,14 @@ class GnmiDevice(Connector):
         Get config from device with gNMI path. By default returns dict with indents.
         """
         content = self._get_config(path=path, operational=operational)
-        if not include_meta:
-            content = content["notification"][0]["update"][0]["val"]
+        return_content = []
+        for _, notification in content.items():
+            for notification in notification:
+                for update in notification["update"]:
+                    return_content.append(update["val"] if not include_meta else update)
         if not oneline:
-            return json.dumps(content, indent=2)
-        return content
+            return json.dumps(return_content, indent=2)
+        return return_content
 
     def get_capabilities(self) -> Any:
         """
