@@ -2,7 +2,9 @@ import os
 import ruamel.yaml  # type: ignore
 import json
 import logging
-from typing import Any, Optional, Tuple, Union
+from pathlib import Path
+from dataclasses import dataclass
+from typing import Any, Tuple, Union, Optional, Dict
 from io import StringIO
 from ananke.struct.repo import GitLabRepo, LocalRepo  # type: ignore
 from ananke.struct.vault import Vault  # type: ignore
@@ -23,7 +25,51 @@ class NonAliasingRTRepresenter(ruamel.yaml.representer.RoundTripRepresenter):
         return True
 
 
-class RepoInterface:
+@dataclass
+class RepoConfigSection:
+    """
+    Object representation of a config file from repo
+    """
+
+    hostname: str
+    path: Optional[str]
+    content: Optional[Any]
+    changed: bool = False
+    new_file: bool = False
+    binding: Any = None
+
+    def populate_binding(self, binding_object: Any):
+        """
+        Populates class binding with dict content fetched from repo
+        """
+        from pyangbind.lib.serialise import pybindJSONDecoder  # type: ignore
+
+        pybindJSONDecoder.load_ietf_json(
+            list(self.content.values())[0], None, None, obj=binding_object
+        )
+        logger.debug(
+            f"Populating pyangbind object for config content: {binding_object}"
+        )
+        self.binding = binding_object
+
+    def export_binding(self) -> Any:
+        """
+        We need to be able to export the content of a changed schema to run our tests,
+        so we split it out in a separate function here
+        """
+        import pyangbind.lib.pybindJSON as pybindJSON  # type: ignore
+
+        ietf_json = pybindJSON.dumps(self.binding, mode="ietf", indent=None)
+        exported = {self.path: json.loads(ietf_json)}
+        logger.debug(
+            "Exporting JSON from binding: {exported}".format(exported=exported)
+        )
+        if exported != self.content:
+            self.changed = True
+        self.content = exported
+
+
+class RepoConfigInterface:
     """
     Class for interacting with a repo and populating data in a readable format.
 
@@ -34,14 +80,11 @@ class RepoInterface:
 
     def __init__(
         self,
-        branch: Union[bool, str] = True,
-        repo: Optional[Union[GitLabRepo, LocalRepo]] = None,
+        branch: Union[bool, str] = False,
     ):
-        if not repo:
-            self.repo = self._populate_repo(branch)
-        else:
-            self.repo = repo
+        self.repo = self._populate_repo(branch)
         self.yaml = self._create_yaml_object()
+        self.content_map: Dict[str, RepoConfigSection] = {}
         self.repo_objects = self.repo.list_objects()
         self.repo_devices = set(
             [
@@ -58,10 +101,16 @@ class RepoInterface:
             ]
         )
 
-    def _populate_settings(self) -> Any:
+    def _create_yaml_object(self) -> ruamel.yaml.YAML:
         """
-        Get settings from ANANKE_CONFIG/settings.yaml
+        Setup a global YAML object for use in reading and writing
         """
+        yaml = ruamel.yaml.YAML(typ="jinja2")
+        yaml.Representer = NonAliasingRTRepresenter
+        yaml.preserve_quotes = True
+        yaml.explicit_start = True
+        yaml.indent(offset=2, sequence=4)
+        return yaml
 
     def _populate_vault(self) -> None:
         """
@@ -125,18 +174,7 @@ class RepoInterface:
             )
             return LocalRepo(REPO_TARGET, branch=branch)
 
-    def _create_yaml_object(self) -> ruamel.yaml.YAML:
-        """
-        Setup a global YAML object for use in reading and writing
-        """
-        yaml = ruamel.yaml.YAML(typ="jinja2")
-        yaml.Representer = NonAliasingRTRepresenter
-        yaml.preserve_quotes = True
-        yaml.explicit_start = True
-        yaml.indent(offset=2, sequence=4)
-        return yaml
-
-    def get_path_and_content(self, file_path: str) -> Tuple[str, Any]:
+    def populate_content_map(self, file_path: str) -> Tuple[str, Any]:
         """
         Fetches YAML content from GitLab and returns the key of the file along with the
         content from that key.
@@ -145,15 +183,23 @@ class RepoInterface:
         single key, and the yang_path comes in handy in some applications for figuring
         out which data model a particular device is using.
         """
-        content_raw = self.repo.get_file(path=file_path)
-        content = self.yaml.load(content_raw.decode())
-        keys = list(content.keys())
-        if len(keys) > 1:
-            logger.warning(
-                f"File contains more than one key: {keys}. Only the first "
-                "key will be used"
+        hostname = Path(file_path).parts[-2]
+        content_raw = self.repo.get_file(path=file_path, create=True)
+        if not content_raw:
+            content = self.content_map[file_path] = RepoConfigSection(
+                hostname=hostname, path=None, content=None, new_file=True
             )
-        return keys[0], content
+        else:
+            content = self.yaml.load(content_raw.decode())
+            keys = list(content.keys())
+            if len(keys) > 1:
+                logger.warning(
+                    f"File contains more than one key: {keys}. Only the first "
+                    "key will be used"
+                )
+            self.content_map[file_path] = RepoConfigSection(
+                hostname=hostname, path=keys[0], content=content
+            )
 
     def get_device_vars(self, file_path: str) -> Any:
         """
@@ -168,83 +214,41 @@ class RepoInterface:
         )
         return variables
 
-
-class NetworkConfig(RepoInterface):
-    """
-    Base class with shared network functions, allows for optional repo object to
-    be passed in in case we are orchestrating several changes at once and want them on
-    the same branch, etc.
-    """
-
-    def __init__(
+    def commit(
         self,
-        file_path: str,
-        repo: Optional[Union[GitLabRepo, LocalRepo]] = None,
-    ):
-        super().__init__(repo=repo)
-        self.file_path = file_path
-        self.yang_path, self.content = self.get_path_and_content(file_path)
-        if not self.repo:
-            raise AttributeError("Repo not provided and failed to instantiate")
-        logger.debug(
-            "YANG path: {yang_path}\nContent: {content}".format(
-                yang_path=self.yang_path, content=self.content
-            )
-        )
-
-    def populate_binding(self, binding_object: Any):
-        """
-        Populates class binding with dict content fetched from repo
-        """
-        from pyangbind.lib.serialise import pybindJSONDecoder  # type: ignore
-
-        pybindJSONDecoder.load_ietf_json(
-            self.content[self.yang_path], None, None, obj=binding_object
-        )
-        logger.debug(
-            f"Populating pyangbind object for config content: {binding_object}"
-        )
-        self.binding = binding_object
-
-    def export_binding(self) -> Any:
-        """
-        We need to be able to export the content of a changed schema to run our tests,
-        so we split it out in a separate function here
-        """
-        import pyangbind.lib.pybindJSON as pybindJSON  # type: ignore
-
-        ietf_json = pybindJSON.dumps(self.binding, mode="ietf", indent=None)
-        exported = {self.yang_path: json.loads(ietf_json)}
-        logger.debug(
-            "Exporting JSON from binding: {exported}".format(exported=exported)
-        )
-        return exported
-
-    def commit_file(
-        self,
+        commit_message: str = "Automated commit",
         author_name: str = "DV Network Configurator",
         author_email: str = "network@doubleverify.com",
-        commit_message: str = "Automated commit",
     ) -> None:
-        """
-        Commit changes to file. Accepts optional branch name, but automatically
-        generates one if not given.
-        """
-        yaml_string = StringIO()
-        if hasattr(self, "binding"):
-            new_content = self.export_binding()
+        actions = []
+        for file_path, config_object in self.content_map.items():
+            yaml_string = StringIO()
             # skip empty commits
-            if self.content == new_content:
-                return
-        else:
-            new_content = self.content
-        self.yaml.dump(new_content, yaml_string)
-        logger.info("Committing file {path}".format(path=self.file_path))
-        logger.debug("File contents {contents}".format(contents=yaml_string.getvalue()))
-        self.repo.update_file(
-            path=self.file_path,
-            content=yaml_string.getvalue(),
-            author_email=author_email,
-            author_name=author_name,
+            if not config_object.changed:
+                continue
+            if not config_object.new_file:
+                self.yaml.dump(config_object.content, yaml_string)
+            # need non-j2 YAML for new files
+            else:
+                yaml = ruamel.yaml.YAML()
+                yaml.Representer = NonAliasingRTRepresenter
+                yaml.preserve_quotes = True
+                yaml.explicit_start = True
+                yaml.indent(offset=2, sequence=4)
+                yaml.dump(config_object.content, yaml_string)
+            content = yaml_string.getvalue()
+            actions.append(
+                {
+                    "file_path": file_path,
+                    "action": "update" if not config_object.new_file else "create",
+                    "content": content,
+                    "author_email": author_email,
+                    "author_name": author_name,
+                }
+            )
+        if not actions:
+            return
+        self.repo.bulk_commit(
             commit_message=commit_message,
+            actions=actions,
         )

@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2024-05-16
+
+### Fixed
+
+- Get config wasn't working for some structures, this fix addresses that
+- Better error handling of missed module imports
+
+### Changed
+
+- Big refactor of config_api, replaces RepoInterface and NetworkConfig with
+  RepoConfigInterface, streamlines behavior and functionality of this construct and allows
+  for better usability within the tooling code.
+
 ## [1.1.1] - 2024-04-29
 
 ### Changed

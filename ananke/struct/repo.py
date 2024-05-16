@@ -31,7 +31,7 @@ class LocalRepo:
             raise ValueError(f"The provided repo directory {repo_dir} does not exist")
         self.repo_dir = repo_dir
         self.repo = self.Repo(repo_dir)
-        self.branch_name = self.create_branch(branch)
+        self.create_branch(branch)
 
     def create_branch(self, branch_name: Union[bool, str]) -> Optional[str]:
         """
@@ -41,16 +41,24 @@ class LocalRepo:
         """
         if branch_name:
             if isinstance(branch_name, bool):
-                return str(self.repo.create_head(get_branch_name()))
-            return str(self.repo.create_head(branch_name))
-        return None
+                name = str(self.repo.create_head(get_branch_name()))
+            else:
+                name = str(self.repo.create_head(branch_name))
+        else:
+            name = None
+        self.branch_name = name
 
-    def get_file(self, path: str) -> Any:
+    def get_file(self, path: str, create: bool = False) -> Union[Any, bool]:
         """
         Get raw content of a file
         """
-        with open(f"{self.repo_dir}/{path}", "rb") as file:
-            return file.read()
+        try:
+            with open(f"{self.repo_dir}/{path}", "rb") as file:
+                return file.read()
+        except FileNotFoundError as err:
+            if create:
+                return False
+            raise FileNotFoundError(err)
 
     def get_branches(self) -> Any:
         """
@@ -96,6 +104,27 @@ class LocalRepo:
             self.repo.config_writer().set_value("user", "email", author_email).release()
         self.repo.index.commit(commit_message)
 
+    def bulk_commit(self, commit_message: str, actions: List[Any]) -> None:
+        """
+        Commit multiple files, local abstraction for GitLab functionality.
+        """
+        if not self.branch_name:
+            raise ValueError("Cannot commit without branch")
+
+        self.repo.git.checkout(self.branch_name)
+        for action in actions:
+            with open(f"{self.repo_dir}/{action['file_path']}", "w") as file:
+                file.write(action["content"])
+            self.repo.index.add([action["file_path"] for action in actions])
+        if any([actions[0]["author_email"], actions[0]["author_name"]]):
+            self.repo.config_writer().set_value(
+                "user", "name", actions[0]["author_name"]
+            ).release()
+            self.repo.config_writer().set_value(
+                "user", "email", actions[0]["author_email"]
+            ).release()
+        self.repo.index.commit(commit_message)
+
     def create_pr(self, title: str) -> str:
         """
         Returns not supported message
@@ -122,7 +151,7 @@ class GitLabRepo:
     def __init__(self, project_id: str, token: str, branch: Union[bool, str] = True):
         self.project_id = project_id
         self.token = token
-        self.branch_name = self.create_branch(branch)
+        self.create_branch(branch)
 
     def _api(
         self,
@@ -130,6 +159,7 @@ class GitLabRepo:
         suffix: str,
         body: Optional[Any] = None,
         params: Optional[Dict[str, Optional[str]]] = None,
+        raise_on_error: bool = True,
     ) -> requests.Response:
         """
         Generic API component for GitLab
@@ -140,7 +170,8 @@ class GitLabRepo:
         response = getattr(self.requests, method)(
             url=f"{url_base}/{suffix}", headers=headers, json=body, params=params
         )
-        response.raise_for_status()
+        if raise_on_error:
+            response.raise_for_status()
         return response
 
     def create_branch(self, branch_name: Union[bool, str]) -> Optional[str]:
@@ -151,18 +182,26 @@ class GitLabRepo:
         """
 
         def _create_branch_api(branch_name: str):
-            self._api(
+            response = self._api(
                 method="post",
                 suffix="repository/branches?branch="
                 f"{branch_name.replace('/', '%2F')}&ref=main",
+                raise_on_error=False,
             )
-            return branch_name
+            if response.status_code == 201 or (
+                response.status_code == 400
+                and response.json()["message"] == "Branch already exists"
+            ):
+                return branch_name
 
         if branch_name:
             if isinstance(branch_name, bool):
-                return _create_branch_api(get_branch_name())
-            return _create_branch_api(branch_name)
-        return None
+                name = _create_branch_api(get_branch_name())
+            else:
+                name = _create_branch_api(branch_name)
+        else:
+            name = None
+        self.branch_name = name
 
     def delete_branch(self) -> None:
         """
@@ -180,9 +219,11 @@ class GitLabRepo:
         """
         return self._api(method="get", suffix=f"repository/branches").json()
 
-    def get_file(self, path: str, branch: Optional[str] = None) -> Any:
+    def get_file(
+        self, path: str, branch: Optional[str] = None, create: bool = False
+    ) -> Union[Any, bool]:
         """
-        Get raw content of a file
+        Get raw content of a file, return False if not found
         """
         path = path.replace("/", "%2F")
         branch_name = "main"
@@ -192,8 +233,12 @@ class GitLabRepo:
             branch_name = branch
         branch_name = branch_name.replace("/", "%2F")
         response = self._api(
-            method="get", suffix=f"repository/files/{path}/raw?ref={branch_name}"
+            method="get",
+            suffix=f"repository/files/{path}/raw?ref={branch_name}",
+            raise_on_error=not create,
         )
+        if response.content.decode() == '{"message":"404 File Not Found"}':
+            return False
         return response.content
 
     def list_objects(self) -> List[PosixPath]:
@@ -239,6 +284,25 @@ class GitLabRepo:
         }
         path = path.replace("/", "%2F")
         self._api(method="put", suffix=f"repository/files/{path}", body=body)
+
+    def bulk_commit(self, commit_message: str, actions: List[Any]) -> None:
+        """
+        Commit multiple files using GitLab commit API
+        """
+        if not self.branch_name:
+            raise ValueError("Cannot commit without branch")
+
+        body = {
+            "branch": self.branch_name,
+            "commit_message": commit_message,
+            "actions": actions,
+        }
+        self._api(
+            method="post",
+            suffix=f"repository/commits",
+            body=body,
+            raise_on_error=False,
+        )
 
     def get_prs(self) -> Any:
         """
