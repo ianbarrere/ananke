@@ -179,9 +179,15 @@ class Config:
                     "entry may overwrite the other".format(path=path)
                 )
                 return
-            binding = importlib.import_module(
-                binding_translate[path]["binding"], package=None
-            )
+            try:
+                binding = importlib.import_module(
+                    binding_translate[path]["binding"], package=None
+                )
+            except ModuleNotFoundError as err:
+                raise ModuleNotFoundError(
+                    "Merge binding configured but module "
+                    f"{binding_translate[path]['binding']} not found: {err}"
+                )
             binding_class = getattr(binding, binding_translate[path]["object"])
             binding_object = getattr(binding_class, binding_translate[path]["object"])()
             for content in config_list:
