@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2024-06-12
+
+### Fixed
+
+- Behavior for targets all in dispatch. Still need to fix for when all and specific are
+  updated.
+- Removed unnecessary imports
+
+### Changed
+
+- Update repo_devices and repo_roles to look for directories that only have .yaml files
+  as well (for devices in process of onboarding)
+- Clear content_map after commit to avoid duplicate commit attempts
+- Use non-j2 YAML for vars.yaml files
+
 ## [1.2.0] - 2024-05-16
 
 ### Fixed

@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 import logging
-from typing import Any, Literal, List, Tuple, Union, Optional
+from typing import Any, Optional
 from pygnmi import client  # typing: ignore
 from ananke.struct.config import Config, ConfigPack
 from ananke.connectors.shared import Connector, get_password
