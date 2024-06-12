@@ -392,8 +392,33 @@ a project access token to gain access to the repo. The project access token can 
 set in your Vault (key name ANANKE_CONFIG_PAT) or can be set as an environment variable
 called ANANKE_CONFIG_PAT (the latter takes precedence over the former).
 
-Once you have set your repo target, you can start working. In the [sample](./ananke/sample/config-tools/)
-directory there is a minimal example of a tool for adding a BGP neighbor to an OpenConfig
+### RepoConfigInterface
+Your interface for the config repo is an object called the RepoConfigInterface (RCI) from
+ananke.config_api. This object provides some tools you can use to interact with your
+config repo. In general, you will instantiate one of these objects and then pass it
+around to your various functions or classes in order for them to interact with the repo.
+
+A basic instantiation like so `rci = RepoConfigInterface()` will create a read-only instance
+which can read from your repo but not write to it. If you want to write to it as well you
+need to specify a branch name or boolean True to the branch argument like
+`rci = RepoConfigInterface(branch=True)` or `rci = RepoConfigInterface(branch="feature/branch")`
+which checks out a branch with an automatically generated or given name.
+
+#### content_map
+The main functionality of the RCI is the content_map, which is a mapping of file paths to
+RepoConfigSection (RCS) objects, which hold various information about the config in the file,
+including an optional binding, the python dict representation of the config, etc.
+
+#### commit
+Once you have made your changes, you can call the rci.commit() method in order to commit
+your changes to the repo. This takes various git-related arguments like commit message,
+author, etc, but will automatically generate everything if not given any arguments. Running
+commit() will clear the content_map as the changes will have already been committed to the
+repo at that point.
+
+### Workflow
+A sample project can be found in the [sample](./ananke/sample/config-tools/) directory.
+There is a minimal example of a tool for adding a BGP neighbor to an OpenConfig
 BGP definition. Ananke supports interacting with the config content either via a pyangbind
 object or directly as JSON. The [example provided](./ananke/sample/config-tools/bgp_neighbor.py)
 shows both approaches. If you are working with the python dict format of your config
@@ -402,41 +427,11 @@ you need to use some logic similar to the get_yang_list_element() function to lo
 list element based on a match criteria. You also need to explicitly create each level in
 your structure with a dict. In general it's a lot nicer to work with a binding if you can.
 
-In any case, such a tool could be consumed in python like so:
-
-```python
-from bgp_neighbor import OcBgpNeighbor
-
-bgpn = OcBgpNeighbor(file_path="devices/site2/device2/bgp.yaml.j2")
-bgpn.add(address="1.2.3.5", description="MY NEW NEIGHBOR", asn="64514")
-# if you don't pass a commit message it will autocreate one
-bgpn.commit_file(commit_message="Add BGP neighbor")
-bgpn.repo.create_pr("My pull request")
-```
-
-Once you instantiate the object, it creates a repo object which handles the interface with
-your repo, either remote or local. A branch is created automatically, but this behavior can
-be overriden when instantiating a repo object with the argument branch=False (but that would
-be useful for only read operations). A GitLab project supports the create_pr() method,
-which will create a pull request from your branch and return the URL for it.
-
-The NetworkConfig object supports passing a repo in as an argument as well, so I suggest
-writing your top-level objects to allow for that. This allows you to create one branch and
-commit multiple files to it if you want to orchestrate more complex changes:
-
-```python
-from ananke.struct.repo import GitLabRepo
-from bgp_neighbor import OcBgpNeighbor
-
-repo = GitLabRepo("123456", "myprojectaccesstoken", "feature/my-branch")
-bgpn = OcBgpNeighbor(file_path="devices/site2/device2/bgp.yaml.j2", repo=repo)
-bgpn.add(address="1.2.3.5", description="Device3", asn="64512")
-bgpn.commit_file()
-bgpn = OcBgpNeighbor(file_path="devices/site2/device3/bgp.yaml.j2", repo=repo)
-bgpn.add(address="1.2.3.4", description="Device2", asn="64512")
-bgpn.commit_file()
-repo.create_pr("I just created a BGP neighborship")
-```
+The process is shown in the create_neighborship() function. First, you instantiate your
+RCI, then you populate the content_map for the file you want to modify, then the rest is
+up to you, but in the example given we pass the RCS object to the class, make our modifications,
+then run rci.commit(), and if you're using a GitLab repo you can also create a PR with the
+rci.repo.create_pr() function (which returns the URL of the pull request).
 
 This is just the tip of the iceberg. You can get much more sophisticated with your config
 generation if you want.
@@ -579,16 +574,20 @@ set of devices.
 
 #### Edge config
 We automatically generate our edge device config by storing our transit and peering definitions
-in a tool similar to PeeringManager. We have a list of peer organizations that we want to
-peer with and some software that reads from the PeeringDB API to determine which IXes we have
-in common with them and configures the relevant devices with the relevant peer organization
-BGP neighbors and settings.
+in PeeringManager. We have a list of peer organizations that we want to peer with and some
+software that reads from the PeeringDB API to determine which IXes we have in common with
+them and configures the relevant devices with the relevant peer organization BGP neighbors
+and settings.
 
-#### Access ports
-We expose a tool to the rest of the company that allows other teams to request access
-port changes. This allows, for example, the SRE team to bring up an access port on their
-own, through an API, which gets an IP address from Netbox, without having to involve the
-network team other than for approval of a pull request.
+#### Netbox integration
+We of course want our Netbox instance to be the source of truth, so we have Netbox send a
+webhook when a device interface has been modified which then updates the configuration in
+the repo accordingly and creates a PR for the network team to review and approve.
+
+This makes it possible for other teams to use Netbox in order to activate an interface
+according to how they want it. For example, the SRE team can update an access port with
+a new VLAN or IP in Netbox and the actual changes are made to the network after the PR
+is approved.
 
 #### Cloud interconnects
 We have cloud interconnects that are managed by the devops team, but our gear needs to

@@ -1,27 +1,50 @@
 from typing import Optional, List, Any
-from ananke.config_api.network_config import NetworkConfig
-from ananke.struct.repo import GitLabRepo
+from ananke.config_api.network_config import RepoConfigInterface, RepoConfigSection
 from ananke.bindings.oc_network_instance import network_instances
 
 
-class OcBgpNeighbor(NetworkConfig):
+def create_neighborship(host_a: str, host_b: str):
+    """
+    Sample workflow
+    """
+    rci = RepoConfigInterface(branch=True)
+    rci.populate_content_map(f"path/to/{host_a}/bgp.yaml.j2")
+    rci.populate_content_map(f"path/to/{host_b}/bgp.yaml.j2")
+    OcBgpNeighbor(
+        rcs=rci.content_map[f"path/to/{host_a}/bgp.yaml.j2"],
+        address="1.2.3.4",
+        description="Neighbor B",
+        asn=64512,
+    )
+    OcBgpNeighborNoBind(
+        rcs=rci.content_map[f"path/to/{host_b}/bgp.yaml.j2"],
+        address="1.2.3.3",
+        description="Neighbor A",
+        asn=64512,
+    )
+    rci.commit(commit_message="Create BGP neighborship")
+    pr_url = rci.repo.create_pr("I just created a BGP neighborship")
+    print("Go here to approve: " + pr_url)
+
+
+class OcBgpNeighbor:
     """
     Object for interacting with BGP neighbor config with binding
     """
 
     def __init__(
-        self,
-        file_path: str,
-        repo: Optional[GitLabRepo] = None,
+        self, rcs: RepoConfigSection, address: str, description: str, asn: int
     ):
-        self.file_path = file_path
-        super().__init__(
-            file_path=self.file_path,
-            repo=repo,
-        )
+        """
+        Here we populate our binding object, make our changes, and then export the
+        binding back to JSON/dictionary to be ready for commit.
+        """
         ni = network_instances.network_instances()
-        self.populate_binding(binding_object=ni)
-        self.default = ni.binding.network_instance["DEFAULT"]
+        rcs.populate_binding(binding_object=ni)
+        self.binding = rcs.binding
+        self.default = self.binding.network_instance["DEFAULT"]
+        self.add(address, description, asn)
+        rcs.export_binding()
 
     def add(self, address: str, description: str, asn: str) -> None:
         """
@@ -38,32 +61,26 @@ class OcBgpNeighbor(NetworkConfig):
         peer.config.peer_as = asn
 
 
-class OcBgpNeighborNoBind(NetworkConfig):
+class OcBgpNeighborNoBind:
     """
     Object for interacting with BGP neighbor config without binding
     """
 
     def __init__(
-        self,
-        file_path: str,
-        repo: Optional[GitLabRepo] = None,
+        self, rcs: RepoConfigSection, address: str, description: str, asn: int
     ):
         """
-        Here we skip the self.populate_bindings() step and instead just refer directly
-        to the config dict in self.content
+        Here we skip the rcs.populate_binding() step and instead just refer directly
+        to the config dict in rcs.content
         """
-        self.file_path = file_path
-        super().__init__(
-            file_path=self.file_path,
-            repo=repo,
-        )
-        ni = self.content["openconfig:/network-instances"][
+        ni = rcs.content["openconfig:/network-instances"][
             "openconfig-network-instance:network-instance"
         ]
         default_index = self.get_yang_list_element(
             yang_list=ni, key="name", match="default"
         )
-        self.defaul = ni[default_index]
+        self.default = ni[default_index]
+        self.add(address, description, asn)
 
     @staticmethod
     def get_yang_list_element(
