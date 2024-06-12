@@ -184,7 +184,11 @@ class Dispatch:
             devices = list(self.variables.keys())
 
             if "all" in targets:
-                return set(devices)
+                return {
+                    device: sections
+                    for device in devices
+                    for _, sections in targets.items()
+                }
 
             _verify_targets(
                 given_targets=targets, found_targets=devices, found_roles=roles
