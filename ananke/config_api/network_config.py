@@ -90,14 +90,14 @@ class RepoConfigInterface:
             [
                 object.parts[-2]
                 for object in self.repo_objects
-                if object.suffix == ".j2" and object.parts[0] == "devices"
+                if object.suffix in [".j2", ".yaml"] and object.parts[0] == "devices"
             ]
         )
         self.repo_roles = set(
             [
                 object.parts[-2]
                 for object in self.repo_objects
-                if object.suffix == ".j2" and object.parts[0] == "roles"
+                if object.suffix in [".j2", ".yaml"] and object.parts[0] == "roles"
             ]
         )
 
@@ -214,6 +214,15 @@ class RepoConfigInterface:
         )
         return variables
 
+    def get_settings(self) -> Any:
+        """
+        Get contents of vars.yaml file for a given host
+        """
+        content_raw = self.repo.get_file(path=f"settings.yaml")
+        settings = self.yaml.load(content_raw.decode())
+        logger.debug("Settings: {}".format(settings))
+        return settings
+
     def commit(
         self,
         commit_message: str = "Automated commit",
@@ -226,9 +235,9 @@ class RepoConfigInterface:
             # skip empty commits
             if not config_object.changed:
                 continue
-            if not config_object.new_file:
+            if not config_object.new_file and Path(file_path).parts[-1] != "vars.yaml":
                 self.yaml.dump(config_object.content, yaml_string)
-            # need non-j2 YAML for new files
+            # need non-j2 YAML for new files and vars.yaml
             else:
                 yaml = ruamel.yaml.YAML()
                 yaml.Representer = NonAliasingRTRepresenter
@@ -246,6 +255,8 @@ class RepoConfigInterface:
                     "author_name": author_name,
                 }
             )
+        # clear content map after a commit
+        self.content_map.clear()
         if not actions:
             return
         self.repo.bulk_commit(
