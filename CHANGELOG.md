@@ -105,6 +105,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added pyproject.toml
 - Added typed.py
 
+[1.3.0]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v1.2.0..v1.3.0
+[1.2.0]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v1.1.1..v1.2.0
+[1.1.1]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v1.1.0..v1.1.1
 [1.1.0]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v1.0.0..v1.1.0
 [1.0.0]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v0.3.4..v1.0.0
 [0.3.4]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v0.3.3..v0.3.4
