@@ -80,7 +80,8 @@ class LocalRepo:
         """
         Lists the contents of a repo.
         """
-        return [Path(path) for path in Path(f"{self.repo_dir}/").rglob("*")]
+        config_dir = Path(self.repo_dir)
+        return [Path(path).relative_to(config_dir) for path in config_dir.rglob("*")]
 
     def update_file(
         self,
