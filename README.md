@@ -238,8 +238,10 @@ write-methods:
   openconfig:/interfaces: update
 ```
 
-Default applies to all paths that are not otherwise listed. The write method passed in
-on the CLI takes precedence over everything defined in the write-methods settings section.
+Default applies to all paths that are not otherwise listed. The same technique can be
+applied to a device's vars.yaml file if you need more granular control over individual
+devices. The write method passed in on the CLI takes precedence over everything defined
+in the write-methods settings/vars sections.
 
 ### Certificates
 You can provide information on where your certificates are stored with the certificate

@@ -204,7 +204,11 @@ class Config:
         Compile pack list. Creates head of list based on priorities defined in
         self.settings and appends unprioritized entries to that.
         """
-        write_methods = self.settings["write-methods"]
+        write_methods = {}
+        if "write-methods" in self.settings:
+            write_methods = write_methods | self.settings["write-methods"]
+        if "write-methods" in self.variables:
+            write_methods = write_methods | self.variables["write-methods"]
         packs = [
             ConfigPack(
                 path=path,

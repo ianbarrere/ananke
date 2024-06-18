@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed local repo to present files in relative path format similar to GitLab
 
+### Added
+
+- Added ability to specify write-methods for individual devices in vars.yaml.
+
 ## [1.3.0] - 2024-06-12
 
 ### Fixed
@@ -105,6 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added pyproject.toml
 - Added typed.py
 
+[1.4.0]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v1.3.0..v1.4.0
 [1.3.0]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v1.2.0..v1.3.0
 [1.2.0]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v1.1.1..v1.2.0
 [1.1.1]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v1.1.0..v1.1.1
