@@ -126,7 +126,7 @@ class LocalRepo:
             ).release()
         self.repo.index.commit(commit_message)
 
-    def create_pr(self, title: str) -> str:
+    def create_pr(self, title: str, description: Optional[str] = None) -> str:
         """
         Returns not supported message
         """
@@ -313,7 +313,7 @@ class GitLabRepo:
             method="get", suffix="merge_requests", params={"state": "opened"}
         ).json()
 
-    def create_pr(self, title: str) -> str:
+    def create_pr(self, title: str, description: Optional[str] = None) -> str:
         """
         Create pull request for main from branch and return URL. Checks for branch diff
         before proceeding and deletes unchanged branches to prevent pileups from
@@ -332,6 +332,8 @@ class GitLabRepo:
             "source_branch": self.branch_name,
             "target_branch": "main",
         }
+        if description:
+            body["description"] = description
         response = self._api(method="post", suffix="merge_requests", body=body)
         self.pr_iid = response.json()["iid"]
         return response.json()["web_url"]

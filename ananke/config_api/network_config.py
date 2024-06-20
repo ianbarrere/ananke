@@ -195,7 +195,7 @@ class RepoConfigInterface:
             if len(keys) > 1:
                 logger.warning(
                     f"File contains more than one key: {keys}. Only the first "
-                    "key will be used"
+                    "key will be used as path"
                 )
             self.content_map[file_path] = RepoConfigSection(
                 hostname=hostname, path=keys[0], content=content
