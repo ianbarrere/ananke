@@ -246,21 +246,15 @@ class GitLabRepo:
         """
         Lists the contents of a repo.
         """
+        params = {"recursive": True, "per_page": 10000}
+        if self.branch_name:
+            params["ref"] = self.branch_name
         response = self._api(
             method="get",
-            params={"recursive": True, "per_page": 100},
+            params=params,
             suffix="repository/tree",
         )
         objects = [Path(object["path"]) for object in response.json()]
-        page = 1
-        while page < int(response.headers["x-total-pages"]):
-            page += 1
-            response = self._api(
-                method="get",
-                params={"recursive": True, "per_page": 100, "page": page},
-                suffix="repository/tree",
-            )
-            objects.extend([Path(object["path"]) for object in response.json()])
         return objects
 
     def update_file(
