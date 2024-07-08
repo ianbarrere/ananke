@@ -174,7 +174,7 @@ class RepoConfigInterface:
             )
             return LocalRepo(REPO_TARGET, branch=branch)
 
-    def populate_content_map(self, file_path: str) -> Tuple[str, Any]:
+    def populate_content_map(self, file_path: str) -> None:
         """
         Fetches YAML content from GitLab and returns the key of the file along with the
         content from that key.
@@ -183,6 +183,11 @@ class RepoConfigInterface:
         single key, and the yang_path comes in handy in some applications for figuring
         out which data model a particular device is using.
         """
+        if file_path in self.content_map.keys():
+            logger.info(
+                "Content map already populated for {}, skipping".format(file_path)
+            )
+            return
         hostname = Path(file_path).parts[-2]
         content_raw = self.repo.get_file(path=file_path, create=True)
         if not content_raw:
