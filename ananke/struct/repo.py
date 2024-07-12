@@ -114,9 +114,9 @@ class LocalRepo:
 
         self.repo.git.checkout(self.branch_name)
         for action in actions:
-            with open(f"{self.repo_dir}/{action['file_path']}", "w") as file:
+            with open(f"{self.repo_dir}/{action['file_path']}", "w+") as file:
                 file.write(action["content"])
-            self.repo.index.add([action["file_path"] for action in actions])
+        self.repo.index.add([action["file_path"] for action in actions])
         if any([actions[0]["author_email"], actions[0]["author_name"]]):
             self.repo.config_writer().set_value(
                 "user", "name", actions[0]["author_name"]
