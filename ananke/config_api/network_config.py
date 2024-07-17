@@ -38,18 +38,20 @@ class RepoConfigSection:
     new_file: bool = False
     binding: Any = None
 
-    def populate_binding(self, binding_object: Any):
+    def populate_binding(self, binding_object: Any, overwrite: bool = False):
         """
         Populates class binding with dict content fetched from repo
         """
-        from pyangbind.lib.serialise import pybindJSONDecoder  # type: ignore
+        if not overwrite:
+            from pyangbind.lib.serialise import pybindJSONDecoder  # type: ignore
 
-        pybindJSONDecoder.load_ietf_json(
-            list(self.content.values())[0], None, None, obj=binding_object
-        )
-        logger.debug(
-            f"Populating pyangbind object for config content: {binding_object}"
-        )
+            pybindJSONDecoder.load_ietf_json(
+                list(self.content.values())[0], None, None, obj=binding_object
+            )
+            logger.debug(
+                "Populating binding object with config content: {}".format(self.content)
+            )
+        logger.debug("Assigning binding: {}".format(binding_object))
         self.binding = binding_object
 
     def export_binding(self) -> Any:
