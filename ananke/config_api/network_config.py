@@ -176,10 +176,10 @@ class RepoConfigInterface:
             )
             return LocalRepo(REPO_TARGET, branch=branch)
 
-    def populate_content_map(self, file_path: str) -> None:
+    def populate_content_map(self, file_path: str) -> RepoConfigSection:
         """
-        Fetches YAML content from GitLab and returns the key of the file along with the
-        content from that key.
+        Fetches YAML content from GitLab and populates RepoConfigSection object in
+        content_map along with returning the RepoConfigSection.
 
         The assumption is that files that this software interacts with are only ever
         single key, and the yang_path comes in handy in some applications for figuring
@@ -189,7 +189,7 @@ class RepoConfigInterface:
             logger.info(
                 "Content map already populated for {}, skipping".format(file_path)
             )
-            return
+            return self.content_map[file_path]
         hostname = Path(file_path).parts[-2]
         content_raw = self.repo.get_file(path=file_path, create=True)
         if not content_raw:
@@ -207,6 +207,7 @@ class RepoConfigInterface:
             self.content_map[file_path] = RepoConfigSection(
                 hostname=hostname, path=keys[0], content=content
             )
+        return self.content_map[file_path]
 
     def get_device_vars(self, file_path: str) -> Any:
         """
