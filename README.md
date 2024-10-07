@@ -209,22 +209,25 @@ username: admin
 ### Priority
 You can optionally supply a priority definition in the settings file, which instructs
 the software to apply paths in a particular order. This is important for some vendor
-implementations. "priority" is a list of paths that match a path in your config. The
-location of the path in the list represents where in the overall sequence of configuration
+implementations. "priority" is a list of regex expressions that match a path in your config.
+The location of the path in the list represents where in the overall sequence of configuration
 items the path's contents will be applied.
 
 ```yaml
 priority:
-  - System/fm-items
-  - Cisco-IOS-XR-policy-repository-cfg:/routing-policy
-  - openconfig:/interfaces
+  - System\/fm-items
+  - Cisco-IOS-XR-policy-repository-cfg:\/routing-policy
+  - openconfig:\/interfaces\/interface[name=po\d{4}]
 ```
 
-If a path doesn't match it is simply skipped, so paths of all models can coexist, and you
-can define priorities for several different vendor implementations in the same list. In
-the example above, if the target platform is NX-OS, then contents under fm-items
-would be applied first followed by openconfig:/interfaces, if the target platform is IOS-XR
-then routing-policy would be applied first followed by openconfig:/interfaces.
+If a path regex doesn't match it is simply skipped, so paths of all models can coexist, and
+you can define priorities for several different vendor implementations in the same list. In
+the example above, if the target platform is NX-OS, then contents under fm-items would be
+applied first followed by openconfig:/interfaces, if the target platform is IOS-XR then
+routing-policy would be applied first followed by openconfig:/interfaces.
+
+Remember that these are regular expressions though, so slashes in the path need to be
+escaped.
 
 ### Write methods
 The write method can be changed from the default by using the -m flag of the ananke_cli.py

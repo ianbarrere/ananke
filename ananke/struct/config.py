@@ -216,9 +216,9 @@ class Config:
                 content=content[0],
                 write_method=write_methods.get(path, write_methods["default"]),
             )
-            for priority_path in self.settings["priority"]
+            for priority_regex in self.settings["priority"]
             for path, content in self.mapping.items()
-            if path == priority_path
+            if re.match(priority_regex, path)
         ]
         if self.sections:
             packs = [
@@ -234,7 +234,7 @@ class Config:
         )
         for path, content in self.mapping.items():
             write_method = write_methods.get(path, write_methods["default"])
-            if path not in self.settings["priority"]:
+            if path not in [pack.path for pack in packs]:
                 if self.sections:
                     for section in self.sections:
                         if section in path:
