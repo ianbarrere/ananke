@@ -48,6 +48,14 @@ def color_results(prefix: str, message: str, message_color: Any) -> str:
     help="Method for write operations, default is replace",
     default=None,
 )
+@click.option(
+    "-S",
+    "--skip-defaults",
+    "skip_defaults",
+    is_flag=True,
+    default=False,
+    help="Skip default configs (if supported in transform)",
+)
 @optgroup.group(
     "Dry-run or debug",
     cls=MutuallyExclusiveOptionGroup,
@@ -76,6 +84,7 @@ def config_set(
     method: WRITE_METHODS,
     debug: bool,
     dry_run: bool,
+    skip_defaults: bool,
 ) -> None:
     """
     Push config to devices/services. Specify comma-separated list of hosts, roles,
@@ -91,8 +100,15 @@ def config_set(
         if targets
         else {None: set(sections)}
     )
-    dispatch = Dispatch(target_type=target_type, targets=targets)
-    dispatch.concurrent_deploy(method, dry_run)
+    deploy_tags = []
+    if dry_run:
+        deploy_tags.append("dry-run")
+    if skip_defaults:
+        deploy_tags.append("skip-default")
+    dispatch = Dispatch(
+        target_type=target_type, targets=targets, deploy_tags=deploy_tags
+    )
+    dispatch.concurrent_deploy(method)
     retry = 1000
     wait_time = 0.2
     total = retry * wait_time

@@ -84,7 +84,7 @@ class Connector:
             return True
         return False
 
-    def _transform_config(self, pack: ConfigPack) -> ConfigPack:
+    def _transform_config(self, pack: ConfigPack) -> Optional[ConfigPack]:
         """
         Runs pack through config transform
         """
@@ -104,7 +104,6 @@ class Connector:
     def deploy(
         target: Any,  # classifying as any to avoid circular imports with dispatch
         write_method: WRITE_METHODS,
-        dry_run: bool,
     ) -> None:
         """
         Shared deploy function used by all connectors. Designed to run in parallel from
@@ -116,8 +115,6 @@ class Connector:
         )
         response = AnankeResponse(target.connector.target_id)
         for pack in target.config.packs:
-            if dry_run:
-                pack.tags.append("dry-run")
             if write_method:
                 pack.write_method = write_method
             pack = (
@@ -125,6 +122,8 @@ class Connector:
                 if target.connector.config_transform
                 else pack
             )
+            if not pack:
+                continue
             response.body.append(
                 {
                     "path": pack.path,
@@ -132,7 +131,7 @@ class Connector:
                     "content": pack.content,
                 }
             )
-            if not dry_run:
+            if "dry-run" not in pack.tags:
                 if (
                     "management" in target.config.variables
                     and "disable-set" in target.config.variables["management"]

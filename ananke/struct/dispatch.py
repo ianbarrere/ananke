@@ -32,6 +32,7 @@ class Dispatch:
         self,
         targets: Dict[Optional[str], Set[str]],
         target_type: Literal["device", "service"],
+        deploy_tags: List[str],
     ):
         if target_type not in ["device", "service"]:
             raise ValueError("Target type must be one of 'device' or 'service'")
@@ -42,9 +43,11 @@ class Dispatch:
         if self.settings["vault"]:
             self.secrets = self.build_vault()
         parsed_targets = self.parse_targets(targets, self.settings.get("domain-name"))
-        self.targets: List[Target] = self.build_targets(targets=parsed_targets)
+        self.targets: List[Target] = self.build_targets(
+            targets=parsed_targets, deploy_tags=deploy_tags
+        )
 
-    def concurrent_deploy(self, method: str, dry_run: bool) -> List[AnankeResponse]:
+    def concurrent_deploy(self, method: str) -> List[AnankeResponse]:
         """
         Deploy config for all targets concurrently
         """
@@ -55,7 +58,6 @@ class Dispatch:
                 Connector.deploy,
                 self.targets,
                 [method for _ in iter_len],
-                [dry_run for _ in iter_len],
             ):
                 self.deploy_results.append(result)
 
@@ -81,7 +83,9 @@ class Dispatch:
             vault_secret=vault_secret,
         ).keys
 
-    def build_targets(self, targets: Dict[Optional[str], Set[str]]) -> List[Target]:
+    def build_targets(
+        self, targets: Dict[Optional[str], Set[str]], deploy_tags: List[str]
+    ) -> List[Target]:
         """
         Builds a list of Target objects consisting of relevant details for connecting
         to the target
@@ -101,6 +105,11 @@ class Dispatch:
                 settings=self.settings,
                 variables=target_vars,
             )
+            # this is kind of a dumb hack, but currently the only use we have for deploy
+            # tags is universal to all packs belonging to a Config object, so we just
+            # set them here
+            for pack in config.packs:
+                pack.tags = deploy_tags
             if self.target_type == "device":
                 connector = GnmiDevice(
                     target_id=target,
