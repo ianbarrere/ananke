@@ -188,8 +188,11 @@ class Config:
                     "Merge binding configured but module "
                     f"{binding_translate[path]['binding']} not found: {err}"
                 )
-            binding_class = getattr(binding, binding_translate[path]["object"])
-            binding_object = getattr(binding_class, binding_translate[path]["object"])()
+            binding_object_sections = binding_translate[path]["object"].split(".")
+            binding_class = getattr(binding, binding_object_sections[0])
+            binding_object = getattr(binding_class, binding_object_sections[0])()
+            for nested in binding_object_sections[1:]:
+                binding_object = getattr(binding_object, nested)
             for content in config_list:
                 pybindJSONDecoder.load_ietf_json(
                     content, None, None, obj=binding_object

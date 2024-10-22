@@ -282,6 +282,9 @@ merge-bindings:
   Cisco-IOS-XR-infra-objmgr-cfg:object-group:
     binding: xr_object_groups
     object: object_group
+  Cisco-IOS-XR-ipv4-acl-cfg:ipv4-acl-and-prefix-list/accesses:
+    binding: xr_acl
+    object: ipv4_acl_and_prefix_list.accesses
 ```
 
 The binding field is the name of your object in the bindings directory and the object
