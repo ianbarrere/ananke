@@ -84,7 +84,7 @@ class Dispatch:
         ).keys
 
     def build_targets(
-        self, targets: Dict[Optional[str], Set[str]], deploy_tags: List[str]
+        self, targets: Dict[Optional[str], Set[str]], deploy_tags: List[str] = []
     ) -> List[Target]:
         """
         Builds a list of Target objects consisting of relevant details for connecting
