@@ -4,10 +4,9 @@ import concurrent.futures
 from pathlib import Path
 from ruamel.yaml import YAML  # type: ignore
 from dataclasses import dataclass
-from typing import Any, Tuple, Dict, List, Optional, Set, Union, Literal
+from typing import Any, Tuple, Dict, List, Optional, Set, Union
 from ananke.struct.config import Config
 from ananke.connectors.gnmi import GnmiDevice
-from ananke.connectors.services import PacketFabric, Megaport
 from ananke.connectors.shared import Connector, AnankeResponse
 
 CONFIG_PACK = Tuple[str, Any]
@@ -18,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Target:
-    connector: Union[GnmiDevice, PacketFabric, Megaport]
+    connector: Union[GnmiDevice]
     config: Config
 
 
@@ -31,12 +30,8 @@ class Dispatch:
     def __init__(
         self,
         targets: Dict[Optional[str], Set[str]],
-        target_type: Literal["device", "service"],
-        deploy_tags: List[str],
+        deploy_tags: List[str] = [],
     ):
-        if target_type not in ["device", "service"]:
-            raise ValueError("Target type must be one of 'device' or 'service'")
-        self.target_type = target_type
         self.settings = self.get_settings()
         self.secrets = None
         self.variables: Dict[str, Any] = self.get_variables()
@@ -92,10 +87,7 @@ class Dispatch:
         """
         target_list = []
         for target, sections in targets.items():
-            if target.split(".")[0] in self.variables:
-                target_vars = self.variables[target.split(".")[0]]
-            else:
-                target_vars = self.variables["services"][target]
+            target_vars = self.variables[target.split(".")[0]]
 
             if self.secrets:
                 target_vars.update(self.secrets)
@@ -110,16 +102,10 @@ class Dispatch:
             # set them here
             for pack in config.packs:
                 pack.tags = deploy_tags
-            if self.target_type == "device":
-                connector = GnmiDevice(
-                    target_id=target,
-                    config=config,
-                )
-            else:
-                if target_vars["service-id"] == "megaport":
-                    connector = Megaport(target_id=target, config=config)
-                elif target_vars["service-id"] == "packetfabric":
-                    connector = PacketFabric(target_id=target, config=config)
+            connector = GnmiDevice(
+                target_id=target,
+                config=config,
+            )
             target = Target(connector=connector, config=config)
             target_list.append(target)
         return target_list
@@ -128,14 +114,20 @@ class Dispatch:
         """
         Get all variable files
         """
-        return [
+        variable_paths = [
             path
-            for path in Path(f"{CONFIG_DIR}/{self.target_type}s").rglob("vars.yaml")
+            for path in Path(f"{CONFIG_DIR}/").rglob("vars.yaml")
+            if "devices" in path.parts
         ]
+        if not variable_paths:
+            logger.warning(
+                "Coule not find variable files in {dir}".format(dir=CONFIG_DIR)
+            )
+        return variable_paths
 
     def get_variables(self) -> Dict[str, str]:
         """
-        Get local device/service variables from vars.yaml
+        Get local device variables from vars.yaml
         """
         vars = {}
         for file in self.get_variable_files():
@@ -167,17 +159,11 @@ class Dispatch:
             """
             Generic service/role/device verification function
             """
-            message_suffix = (
-                self.target_type + " or role"
-                if self.target_type == "device"
-                else self.target_type
-            )
             for target, _ in given_targets.items():
                 if target not in found_roles and target not in found_targets:
                     logger.warning(
-                        "Target '{target}' does not appear to be a "
-                        "{message_suffix}".format(
-                            target=target, message_suffix=message_suffix
+                        "'{target}' does not appear to be a device or role".format(
+                            target=target
                         )
                     )
 
@@ -186,51 +172,37 @@ class Dispatch:
                 path.parts[-2]: targets[None] for path in self.get_variable_files()
             }
 
-        if self.target_type == "device":
-            roles = set()
-            for _, device_vars in self.variables.items():
-                roles.update(device_vars.get("roles", []))
-            devices = list(self.variables.keys())
+        roles = set()
+        for _, device_vars in self.variables.items():
+            roles.update(device_vars.get("roles", []))
+        devices = list(self.variables.keys())
 
-            if "all" in targets:
-                return {
-                    device: sections
-                    for device in devices
-                    for _, sections in targets.items()
-                }
-
-            _verify_targets(
-                given_targets=targets, found_targets=devices, found_roles=roles
-            )
-
-            target_devices = {
-                f"{target}.{domain_name}": sections if domain_name else target
-                for target, sections in targets.items()
-                if target in devices
+        if "all" in targets:
+            return {
+                device: sections
+                for device in devices
+                for _, sections in targets.items()
             }
-            target_roles = {
-                target: sections
-                for target, sections in targets.items()
-                if target in roles
-            }
-            target_devices_from_roles = {}
-            for device, device_vars in self.variables.items():
-                if "roles" in device_vars:
-                    target_devices_from_roles.update(
-                        {
-                            (
-                                f"{device}.{domain_name}" if domain_name else device
-                            ): sections
-                            for role, sections in target_roles.items()
-                            if role in device_vars["roles"]
-                        }
-                    )
 
-            return {**target_devices_from_roles, **target_devices}
-        services = list(self.variables.keys())
-        _verify_targets(given_targets=targets, found_targets=services)
-        return {
-            target: sections
+        _verify_targets(given_targets=targets, found_targets=devices, found_roles=roles)
+
+        target_devices = {
+            f"{target}.{domain_name}": sections if domain_name else target
             for target, sections in targets.items()
-            if target in services
+            if target in devices
         }
+        target_roles = {
+            target: sections for target, sections in targets.items() if target in roles
+        }
+        target_devices_from_roles = {}
+        for device, device_vars in self.variables.items():
+            if "roles" in device_vars:
+                target_devices_from_roles.update(
+                    {
+                        (f"{device}.{domain_name}" if domain_name else device): sections
+                        for role, sections in target_roles.items()
+                        if role in device_vars["roles"]
+                    }
+                )
+
+        return {**target_devices_from_roles, **target_devices}

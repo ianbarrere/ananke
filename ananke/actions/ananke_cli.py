@@ -30,7 +30,6 @@ def color_results(prefix: str, message: str, message_color: Any) -> str:
 
 
 @main.command(name="set")
-@click.argument("target_type", type=click.Choice(["device", "service"]))
 @click.argument("targets", nargs=-1)
 @click.option(
     "-s",
@@ -78,7 +77,6 @@ def color_results(prefix: str, message: str, message_color: Any) -> str:
     help="",
 )
 def config_set(
-    target_type: Literal["device", "service"],
     targets: Tuple[str],
     sections: str,
     method: WRITE_METHODS,
@@ -87,8 +85,8 @@ def config_set(
     skip_defaults: bool,
 ) -> None:
     """
-    Push config to devices/services. Specify comma-separated list of hosts, roles,
-    and/or services with an optional config section parameter
+    Push config to devices. Specify comma-separated list of hosts and/or roles with an
+    optional config section parameter
     """
     if method not in [None, "replace", "update"]:
         raise ValueError("Method must be replace or update")
@@ -105,9 +103,7 @@ def config_set(
         deploy_tags.append("dry-run")
     if skip_defaults:
         deploy_tags.append("skip-default")
-    dispatch = Dispatch(
-        target_type=target_type, targets=targets, deploy_tags=deploy_tags
-    )
+    dispatch = Dispatch(targets=targets, deploy_tags=deploy_tags)
     dispatch.concurrent_deploy(method)
     retry = 1000
     wait_time = 0.2
@@ -161,7 +157,7 @@ def gnmi_get(hostname: str, path: str, oneline: bool, operational: bool) -> None
     Get config from device based on gNMI path
     """
     target = {hostname: set()}
-    dispatch = Dispatch(targets=target, target_type="device")
+    dispatch = Dispatch(targets=target)
 
     target = dispatch.targets[0]
     connection = target.connector
