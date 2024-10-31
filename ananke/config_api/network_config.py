@@ -92,14 +92,14 @@ class RepoConfigInterface:
             [
                 object.parts[-2]
                 for object in self.repo_objects
-                if object.suffix in [".j2", ".yaml"] and object.parts[0] == "devices"
+                if object.suffix in [".j2", ".yaml"] and "devices" in object.parts
             ]
         )
         self.repo_roles = set(
             [
                 object.parts[-2]
                 for object in self.repo_objects
-                if object.suffix in [".j2", ".yaml"] and object.parts[0] == "roles"
+                if object.suffix in [".j2", ".yaml"] and "roles" in object.parts
             ]
         )
 

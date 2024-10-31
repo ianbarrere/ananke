@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2024-10-31
+
+### Changed
+
+- Update repo_devices and repo_roles to match if "devices" or "roles" is anywhere
+  in the file parts. Allows for more flexibility with directory structure. 
+
 ## [2.0.0] - 2024-10-29
 
 ### Changed
@@ -178,6 +185,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added pyproject.toml
 - Added typed.py
 
+[2.0.1]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v2.0.0..v2.0.1
+[2.0.0]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v1.9.0..v2.0.0
 [1.9.0]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v1.8.0..v1.9.0
 [1.8.0]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v1.7.0..v1.8.0
 [1.7.0]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v1.6.1..v1.7.0
