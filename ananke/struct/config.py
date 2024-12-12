@@ -135,6 +135,11 @@ class Config:
             env = jinja2.Environment(loader=jinja2.FileSystemLoader("/"))
             template = env.get_template(file)
             spec = YAML().load(template.render(self.variables))
+            if not spec:
+                logger.warning(
+                    "No content found in file {file}, skipping".format(file=file)
+                )
+                continue
             for path, content in spec.items():
                 self.file_paths[str(Path(file).parts[-1])].append(path)
                 self.mapping[path].append(content)
