@@ -204,21 +204,25 @@ class GitLabRepo:
             name = None
         self.branch_name = name
 
-    def delete_branch(self) -> None:
+    def delete_branch(self, branch_name: Optional[str] = None) -> None:
         """
-        Delete branch
+        Delete branch, either specific or whatever branch the repo is on
         """
+        if not branch_name:
+            branch_name = self.branch_name
         if self.branch_name:
             self._api(
                 method="delete",
-                suffix=f"repository/branches/{self.branch_name.replace('/', '%2F')}",
+                suffix=f"repository/branches/{branch_name.replace('/', '%2F')}",
             )
 
     def get_branches(self) -> Any:
         """
         List branches in the project
         """
-        return self._api(method="get", suffix=f"repository/branches").json()
+        return self._api(
+            method="get", suffix=f"repository/branches", params={"per_page": 1000}
+        ).json()
 
     def get_file(
         self, path: str, branch: Optional[str] = None, create: bool = False
