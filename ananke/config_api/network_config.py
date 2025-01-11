@@ -215,7 +215,9 @@ class RepoConfigInterface:
         """
         if file_path.split("/")[-1] not in self.repo_devices:
             raise ValueError(f"Host path {file_path} not found")
-        content_raw = self.repo.get_file(path=f"devices/{file_path}/vars.yaml")
+        content_raw = self.repo.get_file(
+            path=f"network-elements/devices/{file_path}/vars.yaml"
+        )
         variables = self.yaml.load(content_raw.decode())
         logger.debug(
             "Device vars for {path}:\n\n{vars}".format(path=file_path, vars=variables)
