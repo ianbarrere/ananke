@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2025-02-03
+
+### Added
+
+- Post check support out of the box 
+- Network-elements prefix to match with repo structure
+- Repo functionality
+	- get_branches() now has limit of 1000 instead of 20 per page
+	- delete_branch() can take an argument to delete a specific branch
+
+### Changed
+
+- Improve error handling. It will skip empty files with a warning rather than
+crashing with an obscure python error.
+
 ## [2.0.1] - 2024-10-31
 
 ### Changed
@@ -185,6 +200,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added pyproject.toml
 - Added typed.py
 
+[3.0.0]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v2.0.1..v3.0.0
 [2.0.1]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v2.0.0..v2.0.1
 [2.0.0]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v1.9.0..v2.0.0
 [1.9.0]: https://gitlab.com/doubleverify/techops/sre/dv_sre_lib/-/tags/v1.8.0..v1.9.0

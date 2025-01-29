@@ -99,6 +99,10 @@ and/or roles, and it will figure out which hosts to apply to.
 |-m|The -m flag allows you to update the config rather than replace it, the default is a replace operation unless otherwise specified in the settings.yaml file.|
 |-d|The -d flag returns the JSON formatted config sent to the target as well as the target's response|
 |-D|The -D flag runs in "dry-run" mode, which prints the JSON body without actually sending anything to the target.|
+|-C|The -C flag indicates number of post checks you wish to run|
+|-I|The -I flag, used with the -C flag, indicates the interval between post checks in seconds|
+|-T|The -T flag, used with the -C flag, indicates the tolerance percentage for diffs integer fields in diffs. E.g. -T 10 means that a variance of 10% or less in integer fields is not considered a diff|
+|-S|The -S flag sends the post checks reports to a slack webhook, if one is defined in the settings|
 
 ### get
 The get command will run a gNMI get operation and return the contents at a given path
@@ -332,6 +336,58 @@ define the behavior of the transform function to suit your needs.
 An example of such a transform that I needed to do to get this working with NX-OS can be
 found in the [sample file](./ananke/sample/transforms/cisco_nxos.py)
 
+### Post checks
+Ananke supports monitoring specific gNMI paths for changes after a change is pushed. If
+a diff is reported at one of these paths it will be printed to stdout if using the CLI
+tool, or made available on the Dispatch object if using the API. This system in theory
+can support any paths you want, but in practice it has only been tested with OpenConfig
+paths listed in the example below. Any others probably won't work out of the box. There
+is sometimes variation in how different device types and vendors return OpenConfig data
+via subscribe, so changes may need to be made to account for different vendors as well.
+
+The diff output is the native [dictdiffer](https://pypi.org/project/dictdiffer/) output.
+
+Minimally, a list of paths to monitor must be given. E.g.
+
+```yaml
+post-checks:
+  paths:
+    - "openconfig:/network-instances/network-instance/protocols/protocol/bgp/neighbors/neighbor/state"
+    - "openconfig:/network-instances/network-instance/protocols/protocol/bgp/neighbors/neighbor/afi-safis/afi-safi/state/prefixes"
+    - "openconfig:/interfaces/interface/state"
+    - "openconfig:/interfaces/interface/ethernet/state/counters"
+    - "openconfig:/lldp/interfaces/interface/neighbors/neighbor/state"
+```
+
+You can specify a slack webhook URL to be used in conjunction with CLI-run tests (along
+with the -S flag) if you want the report sent to a slack channel:
+
+```yaml
+post-checks:
+  slack-webhook: https://hooks.slack.com/services/FOO/BAR/BAT
+```
+
+Alternatively you can define the slack webhook with the environment variable
+ANANKE_SLACK_WEBHOOK. The environment variable takes precedence over the settings field.
+
+An example of a python API integration:
+
+```python
+from ananke.struct.dispatch import Dispatch
+
+targets = {
+  "device1": set("interfaces", "bgp")
+}
+dispatch = Dispatch(targets=targets, post_checks=True)
+dispatch.concurrent_deploy("replace")
+while len(dispatch.deploy_results) != len(dispatch.targets) and retry > 0:
+    sleep(0.2)
+print(dispatch.deploy_results)
+sleep(60)
+dispatch.post_status.poll(tolerance=10)
+print(dispatch.post_status.results)
+```
+
 ## Environment Variables
     ANANKE_CONFIG: OS path to config file directory
     Optional:
@@ -483,9 +539,9 @@ circumvent this with custom [write methods](###write-methods) and [transforms](#
 As is probably clear at this point, Ananke is not exactly a turnkey solution to all your
 network automation requirements. It's intended to be used as a framework around which you can
 build your own complete solution. Much of the external functionality however is bespoke and
-organization-specific, so we don't provide it here. But I will give you a high level idea
-of what we use the framework for, which can maybe give you some ideas or point you in the
-right direction for your own solutions.
+organization-specific, so we don't provide it here. But here is a high level idea of what
+we use the framework for, which can maybe give you some ideas or point you in the right
+direction for your own solutions.
 
 ### Pipeline integration
 

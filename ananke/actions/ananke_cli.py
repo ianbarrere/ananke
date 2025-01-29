@@ -5,12 +5,14 @@ CLI adapter for device interaction
 import json
 import click  # type: ignore
 import logging
+import os
+from typing import Tuple, Any
+from colorama import Fore, Style
+from time import sleep
 from click_option_group import optgroup, MutuallyExclusiveOptionGroup  # type: ignore
 from ananke.connectors.shared import WRITE_METHODS
 from ananke.struct.dispatch import Dispatch
-from typing import Tuple, Literal, Any
-from colorama import Fore, Style
-from time import sleep
+from ananke.post_checks.slack import post_run_check_notification
 
 
 main = click.Group(help="Device configurator")
@@ -48,12 +50,34 @@ def color_results(prefix: str, message: str, message_color: Any) -> str:
     default=None,
 )
 @click.option(
+    "-C",
+    "--post-checks",
+    "post_checks",
+    type=int,
+    default=0,
+    help="Number of post checks to run, default is 0",
+)
+@click.option(
+    "-I",
+    "--post-check-interval",
+    "post_check_interval",
+    type=int,
+    help="Interval in seconds between post checks, default is 60",
+)
+@click.option(
+    "-T",
+    "--diff-tolerance",
+    "diff_tolerance",
+    type=int,
+    help="Variation tolerance percentage for integers in post check diffs, default is 10",
+)
+@click.option(
     "-S",
-    "--skip-defaults",
-    "skip_defaults",
+    "--slack-post-checks",
+    "slack_post_checks",
     is_flag=True,
-    default=False,
-    help="Skip default configs (if supported in transform)",
+    type=bool,
+    help="Send post check results to slack",
 )
 @optgroup.group(
     "Dry-run or debug",
@@ -82,7 +106,10 @@ def config_set(
     method: WRITE_METHODS,
     debug: bool,
     dry_run: bool,
-    skip_defaults: bool,
+    post_checks: int,
+    post_check_interval: int,
+    diff_tolerance: int,
+    slack_post_checks: bool,
 ) -> None:
     """
     Push config to devices. Specify comma-separated list of hosts and/or roles with an
@@ -98,12 +125,18 @@ def config_set(
         if targets
         else {None: set(sections)}
     )
+    if (post_check_interval or diff_tolerance) and not post_checks:
+        raise ValueError(
+            "Post check interval/tolerance specified without number of post checks"
+        )
     deploy_tags = []
     if dry_run:
         deploy_tags.append("dry-run")
-    if skip_defaults:
-        deploy_tags.append("skip-default")
-    dispatch = Dispatch(targets=targets, deploy_tags=deploy_tags)
+    dispatch = Dispatch(
+        targets=targets,
+        deploy_tags=deploy_tags,
+        post_checks=True if post_checks else False,
+    )
     dispatch.concurrent_deploy(method)
     retry = 1000
     wait_time = 0.2
@@ -145,6 +178,38 @@ def config_set(
             elif min_priority in [2, 3]:
                 message = result.messages[0].text
             click.echo(color_results("message", message, fg_translate[min_priority]))
+    if post_checks:
+        click.secho("Running post checks...", fg="yellow")
+        post_check_interval = post_check_interval or 10
+        diff_tolerance = diff_tolerance or 10
+        sleep(post_check_interval)
+        check_results = []
+        for check_number in range(post_checks):
+            dispatch.post_status.poll(tolerance=diff_tolerance)
+            check_results.append(dispatch.post_status.results)
+            click.secho(
+                "Post check {}/{}".format(check_number + 1, post_checks), fg="cyan"
+            )
+            for host, diffs in check_results[-1].items():
+                click.secho("  " + host + ": ", fg="magenta")
+                if diffs:
+                    for diff in diffs:
+                        click.secho(f"    - {diff}", fg="white")
+                else:
+                    click.secho("    " + "\U00002705", nl=False)
+                    click.secho(" No diffs", fg="green")
+            slack_webhook = dispatch.settings["post-checks"].get("slack-webhook")
+            if "ANANKE_SLACK_WEBHOOK" in os.environ:
+                slack_webhook = os.environ["ANANKE_SLACK_WEBHOOK"]
+            if slack_webhook and slack_post_checks:
+                post_run_check_notification(
+                    check_results,
+                    check_number,
+                    post_checks,
+                    slack_webhook,
+                )
+            if check_number < post_checks - 1:
+                sleep(post_check_interval)
 
 
 @main.command(name="get")

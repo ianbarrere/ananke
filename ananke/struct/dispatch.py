@@ -8,6 +8,7 @@ from typing import Any, Tuple, Dict, List, Optional, Set, Union
 from ananke.struct.config import Config
 from ananke.connectors.gnmi import GnmiDevice
 from ananke.connectors.shared import Connector, AnankeResponse
+from ananke.post_checks.telemetry import StatusCheck
 
 CONFIG_PACK = Tuple[str, Any]
 CONFIG_DIR = os.environ.get("ANANKE_CONFIG")
@@ -31,6 +32,7 @@ class Dispatch:
         self,
         targets: Dict[Optional[str], Set[str]],
         deploy_tags: List[str] = [],
+        post_checks: bool = False,
     ):
         self.settings = self.get_settings()
         self.secrets = None
@@ -41,6 +43,19 @@ class Dispatch:
         self.targets: List[Target] = self.build_targets(
             targets=parsed_targets, deploy_tags=deploy_tags
         )
+        if post_checks and "dry-run" not in deploy_tags:
+            check_hosts = []
+            for target in self.targets:
+                short_name = target.connector.target_id.split(".")[0]
+                management = self.variables[short_name]["management"]
+                if "disable-set" in management and management["disable-set"]:
+                    continue
+                check_hosts.append(short_name)
+            if "paths" not in self.settings["post-checks"]:
+                raise ValueError("No paths specified for post-checks")
+            self.post_status = StatusCheck(
+                check_hosts, self.secrets, self.settings["post-checks"]["paths"]
+            )
 
     def concurrent_deploy(self, method: str) -> List[AnankeResponse]:
         """
