@@ -3,6 +3,7 @@ from collections import defaultdict
 import concurrent.futures
 from typing import List, Any, Tuple, Optional, Dict, Union
 from ananke.post_checks.gnmi.telemetry import subscribe
+from ananke.connectors.shared import Target
 
 
 class CheckSubscriber:
@@ -12,13 +13,8 @@ class CheckSubscriber:
     formatting methods to improve compatibility between platforms, etc.
     """
 
-    def __init__(
-        self, hostname: str, username: str, password: str, port: int, paths: List[str]
-    ) -> None:
-        self.hostname = hostname
-        self.username = username
-        self.password = password
-        self.port = port
+    def __init__(self, target_dict: Any, paths: List[str]) -> None:
+        self.target_dict = target_dict
         if not paths:
             raise ValueError("No check paths provided")
         self.paths = paths
@@ -204,11 +200,8 @@ class CheckSubscriber:
         """
         return next(
             subscribe(
-                hostname=self.hostname,
+                target_dict=self.target_dict,
                 paths=self.paths,
-                username=self.username,
-                password=self.password,
-                port=self.port,
             )
         )
 
@@ -248,13 +241,11 @@ class CheckSubscriber:
         return diffs
 
 
-def init_check_object(
-    hostname: str, username: str, password: str, port: int, paths: List[str]
-) -> CheckSubscriber:
+def init_check_object(target_dicts: Any, paths: List[str]) -> CheckSubscriber:
     """
     Wrapper to initialize the check object, for use with concurrent.futures
     """
-    return CheckSubscriber(hostname, username, password, port, paths)
+    return CheckSubscriber(target_dicts, paths)
 
 
 def poll_device(
@@ -263,13 +254,18 @@ def poll_device(
     """
     Wrapper to run poll on given check object, for use with concurrent.futures
     """
-    return check_object.hostname, check_object.diff_from_initial(tolerance=tolerance)
+    return check_object.target_dict["target"][0], check_object.diff_from_initial(
+        tolerance=tolerance
+    )
 
 
 class StatusCheck:
-    def __init__(self, hosts: List[str], secrets: Any, paths: List[str]):
-        self.hosts = hosts
-        self.secrets = secrets
+    def __init__(
+        self,
+        targets: List[Target],
+        paths: List[str],
+    ):
+        self.targets = targets
         self.paths = paths
         self.check_objects: List[CheckSubscriber] = []
         self.init_check_objects()
@@ -278,12 +274,12 @@ class StatusCheck:
         """
         Initializes the check objects for each host concurrently
         """
+        target_dicts = [target.connector.target_dict for target in self.targets]
         with concurrent.futures.ProcessPoolExecutor() as executor:
             for check_object in executor.map(
                 init_check_object,
-                self.hosts,
-                [self.secrets] * len(self.hosts),
-                [self.paths] * len(self.hosts),
+                target_dicts,
+                [self.paths] * len(self.targets),
             ):
                 self.check_objects.append(check_object)
 

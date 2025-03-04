@@ -1,7 +1,7 @@
 import os
 import logging
 from pathlib import Path
-from typing import Any, List, Optional, Literal
+from typing import Any, List, Optional, Literal, Union
 from dataclasses import dataclass, field
 from ananke.struct.config import Config, ConfigPack
 from pygnmi.client import gNMIException
@@ -41,6 +41,61 @@ def get_password(username: str, variables: Any) -> str:
     elif password := os.environ.get("ANANKE_CONNECTOR_PASSWORD"):
         return password
     raise ValueError(f"Could not derive password for username {username}")
+
+
+def get_connector_credentials(variables: Any, settings: Any) -> tuple[str, str]:
+    """
+    Get username and password from variables or environment variables.
+
+    Args:
+        variables: Dictionary containing configuration variables
+
+    Returns:
+        tuple: (username, password)
+
+    Raises:
+        ValueError: If username or password cannot be determined
+    """
+    # Try to get username from settings then variables then environment
+    if username := settings.get("username"):
+        pass
+    elif username := variables.get("ANANKE_CONNECTOR_USERNAME"):
+        pass
+    elif username := os.environ.get("ANANKE_CONNECTOR_USERNAME"):
+        pass
+    else:
+        raise ValueError("Could not determine username from variables or environment")
+
+    # Get password for the username
+    password = get_password(username, variables)
+
+    return username, password
+
+
+def get_connector(target_id: str, config: Config, connector_cls: Any) -> Any:
+    """
+    Generic function to create and configure a connector instance with proper authentication.
+
+    Args:
+        target_id: Identifier for the target system
+        config: Configuration object containing settings and variables
+        connector_cls: The connector class to instantiate
+
+    Returns:
+        An instantiated connector object
+
+    Raises:
+        ValueError: If required credentials cannot be determined
+    """
+    # Get credentials
+    username, password = get_connector_credentials(config.variables, config.settings)
+
+    # Create connector instance
+    connector = connector_cls(
+        target_id=target_id, config=config, username=username, password=password
+    )
+
+    return connector
 
 
 class Connector:
@@ -168,3 +223,9 @@ class Connector:
             else:
                 response.messages.append(AnankeResponseMessage(text="Config dry-run"))
         return response
+
+
+@dataclass
+class Target:
+    connector: Union[Connector]
+    config: Config

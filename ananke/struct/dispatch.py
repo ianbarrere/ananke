@@ -3,23 +3,16 @@ import logging
 import concurrent.futures
 from pathlib import Path
 from ruamel.yaml import YAML  # type: ignore
-from dataclasses import dataclass
-from typing import Any, Tuple, Dict, List, Optional, Set, Union
+from typing import Any, Tuple, Dict, List, Optional, Set
 from ananke.struct.config import Config
 from ananke.connectors.gnmi import GnmiDevice
-from ananke.connectors.shared import Connector, AnankeResponse
+from ananke.connectors.shared import Connector, AnankeResponse, get_connector, Target
 from ananke.post_checks.telemetry import StatusCheck
 
 CONFIG_PACK = Tuple[str, Any]
 CONFIG_DIR = os.environ.get("ANANKE_CONFIG")
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class Target:
-    connector: Union[GnmiDevice]
-    config: Config
 
 
 class Dispatch:
@@ -44,17 +37,18 @@ class Dispatch:
             targets=parsed_targets, deploy_tags=deploy_tags
         )
         if post_checks and "dry-run" not in deploy_tags:
-            check_hosts = []
+            check_hosts: List[Target] = []
             for target in self.targets:
                 short_name = target.connector.target_id.split(".")[0]
                 management = self.variables[short_name]["management"]
                 if "disable-set" in management and management["disable-set"]:
                     continue
-                check_hosts.append(short_name)
+                check_hosts.append(target)
             if "paths" not in self.settings["post-checks"]:
                 raise ValueError("No paths specified for post-checks")
             self.post_status = StatusCheck(
-                check_hosts, self.secrets, self.settings["post-checks"]["paths"]
+                check_hosts,
+                self.settings["post-checks"]["paths"],
             )
 
     def concurrent_deploy(self, method: str) -> List[AnankeResponse]:
@@ -117,9 +111,8 @@ class Dispatch:
             # set them here
             for pack in config.packs:
                 pack.tags = deploy_tags
-            connector = GnmiDevice(
-                target_id=target,
-                config=config,
+            connector = get_connector(
+                target_id=target, config=config, connector_cls=GnmiDevice
             )
             target = Target(connector=connector, config=config)
             target_list.append(target)

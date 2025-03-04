@@ -17,34 +17,30 @@ class GnmiDevice(Connector):
     and running calls towards the device.
     """
 
-    def __init__(self, target_id: str, config: Config):
+    def __init__(self, target_id: str, config: Config, username: str, password: str):
         super().__init__(config=config, target_id=target_id)
         self.config = config
-        port = 50051
+        self.port = 50051
         if gnmi_port := self.variables["management"].get("gnmi-port"):
-            port = gnmi_port
-        username = self.settings["username"]
-        if "username" in config.variables:
-            username = config.variables["username"]
-        password = get_password(username, config.variables)
-        target_dict = {
-            "target": (target_id, port),
+            self.port = gnmi_port
+        self.target_dict = {
+            "target": (target_id, self.port),
             "username": username,
             "password": password,
         }
         if tls_server := self.variables["management"].get("tls-server"):
-            target_dict["override"] = tls_server
+            self.target_dict["override"] = tls_server
         if cert := self._get_cert():
-            target_dict["path_cert"] = cert
+            self.target_dict["path_cert"] = cert
         else:
-            target_dict["insecure"] = True
-        self.session = client.gNMIclient(**target_dict)
+            self.target_dict["insecure"] = True
+        self.session = client.gNMIclient(**self.target_dict)
         logger.info(
             "Creating GnmiDevice instance for {username}@{target_id}:{port} "
             "with cert {cert}. TLS server name override: {tls_server}".format(
                 username=username,
                 target_id=target_id,
-                port=port,
+                port=self.port,
                 cert=cert,
                 tls_server=tls_server,
             )

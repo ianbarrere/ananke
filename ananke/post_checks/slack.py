@@ -1,16 +1,24 @@
 import requests
-from typing import Any, Dict, List
+import logging
+from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 def post_run_check_notification(
     results_list: List[Dict[str, List[Any]]],
     check_number: int,
     total_checks: int,
-    slack_webhook: str,
+    slack_webhook: Optional[str],
 ) -> None:
     """
     Sends results of Ananke post run check to slack
     """
+    if not slack_webhook:
+        logger.warning(
+            "Slack output specified but no webhook set, skipping slack output"
+        )
+        return
 
     def _get_message_emoji(path_diffs: List[Any]) -> bool:
         """
@@ -35,7 +43,7 @@ def post_run_check_notification(
     check_results = results_list[check_number]
     check_number += 1
     if check_number == 1:
-        header = ":test_tube: " f"*Ananke CLI post change report*\n"
+        header = ":test_tube: " f"*Ananke post change report*\n"
         body["blocks"].append(
             {
                 "type": "section",
