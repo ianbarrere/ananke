@@ -142,7 +142,6 @@ def config_set(
     wait_time = 0.2
     total = retry * wait_time
     while len(dispatch.deploy_results) != len(dispatch.targets) and retry > 0:
-        print(dispatch.deploy_results)
         sleep(wait_time)
         retry -= 1
     if len(dispatch.deploy_results) != len(dispatch.targets):
@@ -217,7 +216,10 @@ def config_set(
 @click.argument("path")
 @click.option("-O", "--oneline", "oneline", is_flag=True, default=False)
 @click.option("-o", "--operational", "operational", is_flag=True, default=False)
-def gnmi_get(hostname: str, path: str, oneline: bool, operational: bool) -> None:
+@click.option("-y", "--yaml", "yaml", is_flag=True, default=False)
+def gnmi_get(
+    hostname: str, path: str, oneline: bool, operational: bool, yaml: bool
+) -> None:
     """
     Get config from device based on gNMI path
     """
@@ -226,7 +228,12 @@ def gnmi_get(hostname: str, path: str, oneline: bool, operational: bool) -> None
 
     target = dispatch.targets[0]
     connection = target.connector
-    config = connection.get_config(path=path, oneline=oneline, operational=operational)
+    format = "JSON"
+    if yaml:
+        format = "YAML"
+    config = connection.get_config(
+        path=path, oneline=oneline, operational=operational, format=format
+    )
     click.secho(config, fg="white")
 
 

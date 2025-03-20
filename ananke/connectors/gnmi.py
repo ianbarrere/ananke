@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Literal
 from pygnmi import client  # typing: ignore
 from ananke.struct.config import Config, ConfigPack
 from ananke.connectors.shared import Connector, get_password
@@ -135,17 +135,31 @@ class GnmiDevice(Connector):
     #     )
 
     def get_config(
-        self, path: str, oneline: bool, operational: bool, include_meta: bool = False
+        self,
+        path: str,
+        oneline: bool,
+        operational: bool,
+        include_meta: bool = False,
+        format: Literal["JSON", "YAML"] = "JSON",
     ) -> Any:
         """
         Get config from device with gNMI path. By default returns dict with indents.
         """
+        if format == "YAML" and oneline:
+            raise NotImplementedError("YAML not supported in oneline mode")
         content = self._get_config(path=path, operational=operational)
         return_content = []
         for _, notification in content.items():
             for notification in notification:
                 for update in notification["update"]:
                     return_content.append(update["val"] if not include_meta else update)
+        if format == "YAML":
+            from ruamel.yaml import YAML  # type: ignore
+            from io import StringIO
+
+            yaml_string = StringIO()
+            YAML().dump(return_content, yaml_string)
+            return yaml_string.getvalue()
         if not oneline:
             return json.dumps(return_content, indent=2)
         return return_content
