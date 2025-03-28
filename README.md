@@ -126,7 +126,7 @@ multiple targets and config sections that don't necessarily correspond to each o
 The shared templates need a way of matching the platform to which they are being
 deployed. This is because you might have a repo that contains multiple device types and
 if you are using native YANG models then those will be different for different platforms.
-As such, the software attempts to find a file in the format of <file_name>_<platform>.yang.j2
+As such, the software attempts to find a file in the format of <file_name>_<platform>.yaml.j2
 (where platform matches exactly what is set under platform/os in vars.yaml). It will apply
 these platform-specific files **in addition** to files without a platform specification,
 so if you have a file called mgmt.yaml.j2 and one called mgmt_cisco-xr.yaml.j2 in roles/all
