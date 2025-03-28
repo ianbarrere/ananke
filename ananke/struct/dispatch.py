@@ -170,7 +170,8 @@ class Dispatch:
             for target, _ in given_targets.items():
                 if target not in found_roles and target not in found_targets:
                     logger.warning(
-                        "'{target}' does not appear to be a device or role".format(
+                        "'{target}' does not appear to be a device or role. Make sure "
+                        "a vars.yaml file exists if it is a device.".format(
                             target=target
                         )
                     )
