@@ -28,6 +28,7 @@ def color_results(prefix: str, message: str, message_color: Any) -> str:
         + Style.RESET_ALL
         + message_color
         + message
+        + Style.RESET_ALL
     )
 
 
