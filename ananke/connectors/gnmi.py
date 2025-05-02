@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path
 import logging
 from typing import Any, Optional, Literal
@@ -23,17 +24,40 @@ class GnmiDevice(Connector):
         self.port = 50051
         if gnmi_port := self.variables["management"].get("gnmi-port"):
             self.port = gnmi_port
-        self.target_dict = {
-            "target": (target_id, self.port),
-            "username": username,
-            "password": password,
-        }
-        if tls_server := self.variables["management"].get("tls-server"):
-            self.target_dict["override"] = tls_server
-        if cert := self._get_cert():
-            self.target_dict["path_cert"] = cert
+        if self.variables["management"].get("pygnmi-target"):
+            gnmi_settings = self.variables["management"]["pygnmi-target"]
+            gnmi_target = gnmi_settings["target"]
+            target_regex = re.search(
+                "\([\"'](.*)[\"'], (.*)\)",
+                gnmi_target,
+            )
+            if not target_regex:
+                raise ValueError(
+                    f"Could not parse target {gnmi_target} into host and port, "
+                    "expecting string format like '(\"hostname\", 50051)'"
+                )
+            target_tuple = (target_regex.groups()[0], int(target_regex.groups()[1]))
+            self.variables["management"]["pygnmi-target"]["target"] = target_tuple
+            self.target_dict = self.variables["management"]["pygnmi-target"]
+            if "username" not in gnmi_settings or "password" not in gnmi_settings:
+                raise ValueError("No username/password specified in pygnmi-target")
+            if "path_cert" not in gnmi_settings and "insecure" not in gnmi_settings:
+                if "skip_verify" not in gnmi_settings:
+                    raise ValueError("No cert method specified in pygnmi-target")
         else:
-            self.target_dict["insecure"] = True
+            self.target_dict = {
+                "target": (target_id, self.port),
+                "username": username,
+                "password": password,
+            }
+            if self.variables["management"].get("skip-verify"):
+                self.target_dict["skip_verify"] = True
+            if tls_server := self.variables["management"].get("tls-server"):
+                self.target_dict["override"] = tls_server
+            if cert := self._get_cert():
+                self.target_dict["path_cert"] = cert
+            else:
+                self.target_dict["insecure"] = True
         self.session = client.gNMIclient(**self.target_dict)
         logger.info(
             "Creating GnmiDevice instance for {username}@{target_id}:{port} "
@@ -41,8 +65,8 @@ class GnmiDevice(Connector):
                 username=username,
                 target_id=target_id,
                 port=self.port,
-                cert=cert,
-                tls_server=tls_server,
+                cert=self.target_dict.get("path_cert"),
+                tls_server=self.target_dict.get("override"),
             )
         )
 

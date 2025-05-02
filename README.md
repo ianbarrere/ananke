@@ -157,8 +157,23 @@ management:
   gnmi-port: 57777 # gNMI port
   certificate: "myhost.pem" # custom certificate name if different from global
   disable-set: true # option to disable config push to device
+  skip-verify: true # option to disable SSL verification
 roles:
   - "edge"
+```
+
+Finally, if you have a unique combination of pygnmi arguments you need to specify, you can
+provide an entire pygnmi target dictionary which specifies all required arguments to
+gNMIclient like so:
+
+```yaml
+management:
+  pygnmi-target:
+    target: ("192.168.1.20", 50051)
+    username: "my_overridden_username"
+    password: "my_password"
+    path_cert: "/path/to/other/cert.pem"
+    skip_verify: true
 ```
 
 Those are the only attributes used by Ananke natively, but you can store all sorts of other

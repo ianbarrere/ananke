@@ -31,14 +31,14 @@ def get_password(username: str, variables: Any) -> str:
     Attempts to get a password for a given username either from variables or defined
     environment variables.
     """
-    if password := variables.get(f"ANANKE_CONNECTOR_PASSWORD_{username}"):
-        return password
-    elif password := variables.get("ANANKE_CONNECTOR_PASSWORD"):
-        return password
-
     if password := os.environ.get(f"ANANKE_CONNECTOR_PASSWORD_{username}"):
         return password
     elif password := os.environ.get("ANANKE_CONNECTOR_PASSWORD"):
+        return password
+
+    elif password := variables.get(f"ANANKE_CONNECTOR_PASSWORD_{username}"):
+        return password
+    elif password := variables.get("ANANKE_CONNECTOR_PASSWORD"):
         return password
     raise ValueError(f"Could not derive password for username {username}")
 
@@ -59,9 +59,9 @@ def get_connector_credentials(variables: Any, settings: Any) -> tuple[str, str]:
     # Try to get username from settings then variables then environment
     if username := settings.get("username"):
         pass
-    elif username := variables.get("ANANKE_CONNECTOR_USERNAME"):
+    elif username := variables["management"].get("username"):
         pass
-    elif username := os.environ.get("ANANKE_CONNECTOR_USERNAME"):
+    elif username := settings.get("username"):
         pass
     else:
         raise ValueError("Could not determine username from variables or environment")
