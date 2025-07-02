@@ -33,10 +33,11 @@ The roles directory must not be hierarchical, with a directory named after the r
 immediately under roles/ with the applicable files inside that.
 
 The last directory in either case should contain the files themselves. These are .yaml.j2
-(more on that later) files that contain the config data you want deployed to your device.
+or json.j2 (more on that later) files that contain the config data you want deployed to your
+device.
 
 ### File structure
-The sample directory illustrates this, but the structure of the files is a YAML dict with
+The sample directory illustrates this, but the structure of the files is a dict with
 a path key and the contents to be inserted under that path as the value. The path concept
 is common and native for data modeled in YANG, and can be applied to other types of data
 as well. Some considerations about path depth are covered in the [Dealing with replace](#dealing-with-replace)
@@ -47,10 +48,10 @@ NetworkConfig API can not handle files with more than one. Thus, for files that 
 to interact with using the NetworkConfig API you are limited to one path/content pair.
 For other files (like common role config, etc) you can use as many as you like.
 
-Ananke has no stake in how your files are formatted, as long as it's YAML (with optional
-jinja2). In most cases this will be YANG data modeled according to the model(s) that your
-device supports. You can mix and match models, such that interfaces (for example) are
-defined in openconfig and other, vendor-specific attributes are in a native model.
+Ananke has no stake in how your files are formatted, as long as it's YAML or JSON (with
+optional jinja2). In most cases this will be YANG data modeled according to the model(s)
+that your device supports. You can mix and match models, such that interfaces (for example)
+are defined in openconfig and other, vendor-specific attributes are in a native model.
 
 ## How does Ananke help me?
 

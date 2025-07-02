@@ -90,12 +90,14 @@ class Config:
             return roles
         return []
 
-    def _get_files(self) -> List[PosixPath]:
+    def _get_files(self) -> List[str]:
         """
         Helper method to compute list of files for config. Hostname directory, followed
         by all applicable roles, followed by all, in that order.
         """
-        files = [file for file in Path(CONFIG_DIR).rglob("*.yaml.j2")]
+        files = [file for file in Path(CONFIG_DIR).rglob("*.yaml.j2")] + [
+            file for file in Path(CONFIG_DIR).rglob("*.json.j2")
+        ]
         host_files = [str(file) for file in files if file.parts[-2] == self.target_id]
         role_files = [str(file) for file in files if file.parts[-2] in self.roles]
         all_files = [str(file) for file in files if file.parts[-2] == "all"]
@@ -121,9 +123,9 @@ class Config:
                 if "service-id" in self.variables:
                     continue
                 platform = self.variables["platform"]["os"]
-                if (suffix := re.search("_(.*).yaml.j2", file)) and suffix.groups()[
-                    0
-                ] != platform:
+                if (
+                    suffix := re.search("_(.*).(yaml|json).j2", file)
+                ) and suffix.groups()[0] != platform:
                     logger.debug(
                         "Platform suffix for file {file} does not match device "
                         "platform {platform}, skipping".format(
@@ -134,7 +136,15 @@ class Config:
             # render the data using jinja2 with vars from self.variables
             env = jinja2.Environment(loader=jinja2.FileSystemLoader("/"))
             template = env.get_template(file)
-            spec = YAML().load(template.render(self.variables))
+            if file.endswith(".json.j2"):
+                spec = json.loads(template.render(self.variables))
+            elif file.endswith(".yaml.j2"):
+                spec = YAML().load(template.render(self.variables))
+            else:
+                raise ValueError(
+                    "File {file} has an unknown suffix, must be .yaml.j2 or "
+                    ".json.j2".format(file=file)
+                )
             if not spec:
                 logger.warning(
                     "No content found in file {file}, skipping".format(file=file)
