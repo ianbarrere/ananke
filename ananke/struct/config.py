@@ -75,7 +75,7 @@ class Config:
             raise ValueError("Sections must be a set of values")
         resolved_sections = set()
         for section in sections:
-            if re.search("\.yaml\.j2$", section):
+            if re.search("\.(yaml|json)\.j2$", section):
                 resolved_sections.update(self.file_paths[section])
             else:
                 resolved_sections.add(section)
